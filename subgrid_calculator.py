@@ -157,6 +157,25 @@ class subgridCalculatormain():
             z_array[z_array == nodataval] = np.nan
             
         return X,Y,z_array,xRes,yRes,xCoords,yCoords
+    
+#################### FUNCTION TO PLOT SUBGRID VERTEX VARIABLES #####################
+
+    def plotVertexSubgridVariable(meshObject,subgridVariable):
+        
+        import matplotlib.pyplot as plt
+        import cmocean
+            
+        fig1, ax1 = plt.subplots(figsize=(9,9))
+        ax1.set_aspect('equal')
+        tcf = ax1.tricontourf(meshObject[1], subgridVariable,cmap=cmocean.cm.rain,
+                              levels=20,extend='both')
+        ax1.triplot(meshObject[1], color = 'k',linestyle='-',linewidth=0.25)
+        cbar = fig1.colorbar(tcf,extendrect=True)
+        cbar.ax.get_yaxis().labelpad = 15
+        cbar.ax.set_ylabel('Elevation (m)', rotation=270,fontsize = 14)
+        # ax1.set_title(title,fontsize=24)
+        ax1.set_xlabel('Longitude',fontsize=20)
+        ax1.set_ylabel('Latitude',fontsize=20)   
                     
 #################### FUNCTION TO PERFORM SUBGRID CALCULATIONS #######################    
     
@@ -887,6 +906,8 @@ class subgridCalculatormain():
         endTot = time.perf_counter()
         
         print('Total Time = {} minutes'.format((endTot-startTot)/60))
+        
+        # return phi1011Check, phi1057Check, phi1056Check, phi1013Check, phi1010Check, phi1053Check
         
         # # try using a patch plot
          
