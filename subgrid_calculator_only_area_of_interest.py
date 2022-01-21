@@ -821,11 +821,11 @@ class subgridCalculatormain():
         
         # now fill non subgrid spaces with -99999
         
-        wetFractionVertex[totalVertInfoTable[:,0].astype(int),:] = -99999
-        wetTotWatDepthVertex[totalVertInfoTable[:,0].astype(int),:] = -99999
-        gridTotWatDepthVertex[totalVertInfoTable[:,0].astype(int),:] = -99999
-        vertexArea[totalVertInfoTable[:,0].astype(int),:] = -99999
-        cfVertex[totalVertInfoTable[:,0].astype(int),:] = -99999
+        wetFractionVertex[np.where(binaryVertexList == 0),:] = -99999
+        wetTotWatDepthVertex[np.where(binaryVertexList == 0),:] = -99999
+        gridTotWatDepthVertex[np.where(binaryVertexList == 0),:] = -99999
+        vertexArea[np.where(binaryVertexList == 0),:] = -99999
+        cfVertex[np.where(binaryVertexList == 0),:] = -99999
 
         
         if level0andLevel1:
@@ -834,8 +834,8 @@ class subgridCalculatormain():
             
             # now fill non subgrid spaces with -99999
             
-            cmfVertex[totalVertInfoTable[:,0].astype(int),:] = -99999
-            cadvVertex[totalVertInfoTable[:,0].astype(int),:] = -99999
+            cmfVertex[np.where(binaryVertexList == 0),:] = -99999
+            cadvVertex[np.where(binaryVertexList == 0),:] = -99999
         
         # loop through elements and sum there vertex quantities    
         for j in range(numEle):
@@ -1251,9 +1251,9 @@ class subgridCalculatormain():
             print('Element {0} completed'.format(i))
             
         # fill the elements that are not contained in the subgrid region with -99999
-        depthsEleForLookup[:,:,np.where(binaryElementList==1)[0]] = -99999
-        HEleForLookup[:,:,np.where(binaryElementList==1)[0]] = -99999
-        cadvForLookup[:,:,np.where(binaryElementList==1)[0]] = -99999
+        depthsEleForLookup[:,:,np.where(binaryElementList==0)[0]] = -99999
+        HEleForLookup[:,:,np.where(binaryElementList==0)[0]] = -99999
+        cadvForLookup[:,:,np.where(binaryElementList==0)[0]] = -99999
         
         ncFile = nc.Dataset(outputFilename, mode = 'w', format = 'NETCDF4')
         
