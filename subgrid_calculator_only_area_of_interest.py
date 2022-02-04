@@ -347,7 +347,7 @@ class subgridCalculatormain():
             whichAreInside = list(np.where(totalEleInfoTable[:,5] == 1)[0])
             elementDict["DEM%s"%i] = totalEleInfoTable[whichAreInside,0]
             # delete those elements from the total list
-            # totalEleInfoTable = np.delete(totalEleInfoTable,whichAreInside,axis=0)
+            totalEleInfoTable = np.delete(totalEleInfoTable,whichAreInside,axis=0)
             
             # create a list of elements within subgrid area
             
@@ -366,7 +366,7 @@ class subgridCalculatormain():
             
             # keep track of vertices outside subgrid area
             
-            # totalVertInfoTable = np.delete(totalVertInfoTable,whichAreInside,axis=0)
+            totalVertInfoTable = np.delete(totalVertInfoTable,whichAreInside,axis=0)
             
         
         # now concatenate the lists from above
@@ -503,8 +503,10 @@ class subgridCalculatormain():
             # elementList = elementDict["DEM%s"%((len(demFilenameList)-1)-i)]
             elementList = elementDict["DEM%s"%i]
             
+            countElementLoop = 0
             # loop through the elements
             for ele in elementList:
+            # for ele in elementList[:2]:
                 
                 # cast ele to integer
                 ele = int(ele)
@@ -792,9 +794,9 @@ class subgridCalculatormain():
                         cadv[ele,j,:] = (1/(wetAvgTotWatDepth)) \
                             *(cadvMiddleTermList/wetDrySubElementList)*rv[ele,j,:]**2
                         
-                    
+                countElementLoop += 1
                 stopTime = time.perf_counter()
-                print("Finished Element {} in DEM {} took {}".format(ele+1,i,stopTime - startTime))
+                print("Finished Element {0} of {1} in DEM {2} took {3}".format(countElementLoop,len(elementList),i,stopTime - startTime))
             
                 
         # add bottom limit on cf, cmf. and cadv
@@ -904,17 +906,16 @@ class subgridCalculatormain():
                     cadvVertex[nm3,:] += cadv3 * area[j,2]
         
         # now average all of these by the vertex areas
-        
-        wetFractionVertex = wetFractionVertex/vertexArea
-        wetTotWatDepthVertex = wetTotWatDepthVertex/vertexArea
-        gridTotWatDepthVertex = gridTotWatDepthVertex/vertexArea
-        cfVertex = cfVertex/vertexArea
+        wetFractionVertex[np.where(binaryVertexList == 1)] = wetFractionVertex[np.where(binaryVertexList == 1)]/vertexArea[np.where(binaryVertexList == 1)]
+        wetTotWatDepthVertex[np.where(binaryVertexList == 1)] = wetTotWatDepthVertex[np.where(binaryVertexList == 1)]/vertexArea[np.where(binaryVertexList == 1)]
+        gridTotWatDepthVertex[np.where(binaryVertexList == 1)] = gridTotWatDepthVertex[np.where(binaryVertexList == 1)]/vertexArea[np.where(binaryVertexList == 1)]
+        cfVertex[np.where(binaryVertexList == 1)] = cfVertex[np.where(binaryVertexList == 1)]/vertexArea[np.where(binaryVertexList == 1)]
         # cfwetVertex = cfwetVertex/vertexArea
         if level0andLevel1:
             
-            cmfVertex = cmfVertex/vertexArea
+            cmfVertex[np.where(binaryVertexList == 1)] = cmfVertex[np.where(binaryVertexList == 1)]/vertexArea[np.where(binaryVertexList == 1)]
             # cmfgridVertex = cmfgridVertex/vertexArea
-            cadvVertex = cadvVertex/vertexArea
+            cadvVertex[np.where(binaryVertexList == 1)] = cadvVertex[np.where(binaryVertexList == 1)]/vertexArea[np.where(binaryVertexList == 1)]
             # cadvgridVertex = cadvgridVertex/vertexArea
         
         # now we need to check to see if there are any vertices in the subgrid
