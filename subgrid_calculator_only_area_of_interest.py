@@ -347,7 +347,7 @@ class subgridCalculatormain():
             whichAreInside = list(np.where(totalEleInfoTable[:,5] == 1)[0])
             elementDict["DEM%s"%i] = totalEleInfoTable[whichAreInside,0]
             # delete those elements from the total list
-            totalEleInfoTable = np.delete(totalEleInfoTable,whichAreInside,axis=0)
+            # totalEleInfoTable = np.delete(totalEleInfoTable,whichAreInside,axis=0)
             
             # create a list of elements within subgrid area
             
@@ -366,7 +366,7 @@ class subgridCalculatormain():
             
             # keep track of vertices outside subgrid area
             
-            totalVertInfoTable = np.delete(totalVertInfoTable,whichAreInside,axis=0)
+            # totalVertInfoTable = np.delete(totalVertInfoTable,whichAreInside,axis=0)
             
         
         # now concatenate the lists from above
@@ -427,13 +427,27 @@ class subgridCalculatormain():
         
         cf = np.zeros((numEle,nodesPerEle,num_SfcElevs)).astype(np.float32)
         
+        maxElevationEle = np.zeros(numEle).astype(np.float32) # find highest elevation in each element for use in variable phi
+        
+        maxElevationSubEle = np.zeros((numEle,3)).astype(np.float32) # find the highest elevation in each subElement
+        
         # now fill the rows and columns of non subgrid vertices and elements with -99999
         
-        wetFraction[totalEleInfoTable[:,0].astype(int),:,:] = -99999
-        area[totalEleInfoTable[:,0].astype(int),:] = -99999
-        totWatDepth[totalEleInfoTable[:,0].astype(int),:,:] = -99999
-        wetTotWatDepth[totalEleInfoTable[:,0].astype(int),:,:] = -99999
-        cf[totalEleInfoTable[:,0].astype(int),:,:] = -99999
+        # wetFraction[totalEleInfoTable[:,0].astype(int),:,:] = -99999
+        # area[totalEleInfoTable[:,0].astype(int),:] = -99999
+        # totWatDepth[totalEleInfoTable[:,0].astype(int),:,:] = -99999
+        # wetTotWatDepth[totalEleInfoTable[:,0].astype(int),:,:] = -99999
+        # cf[totalEleInfoTable[:,0].astype(int),:,:] = -99999
+        
+        wetFraction[np.where(binaryElementList == 0),:,:] = -99999
+        area[np.where(binaryElementList == 0)] = -99999
+        totWatDepth[np.where(binaryElementList == 0),:,:] = -99999
+        wetTotWatDepth[np.where(binaryElementList == 0),:,:] = -99999
+        cf[np.where(binaryElementList == 0),:,:] = -99999
+        
+        # fill max elevation
+        maxElevationEle[np.where(binaryElementList == 0)] = -99999
+        maxElevationSubEle[np.where(binaryElementList == 0)] = -99999
         
         # these variables are used if you want level 1 corrections
         
@@ -447,9 +461,9 @@ class subgridCalculatormain():
             
             # now fill the rows and columns of non subgrid vertices and elements with -99999
             
-            rv[totalEleInfoTable[:,0].astype(int),:,:] = -99999
-            cmf[totalEleInfoTable[:,0].astype(int),:,:] = -99999
-            cadv[totalEleInfoTable[:,0].astype(int),:,:] = -99999
+            rv[np.where(binaryElementList == 0),:,:] = -99999
+            cmf[np.where(binaryElementList == 0),:,:] = -99999
+            cadv[np.where(binaryElementList == 0),:,:] = -99999
             
         
 
@@ -478,13 +492,21 @@ class subgridCalculatormain():
             nArray = landcoverData[2] # array of mannings n values
             landcoverData = None # deallocate
             # dictionary to translate between C-CAP and Manning's values
-            landCoverToManning = {0:0.02,2:0.12,3:0.12,4:0.12,5:0.035,6:0.1,7:0.05,8:0.035,
-                              9:0.16,10:0.18,11:0.17,12:0.08,13:0.15,14:0.075,
-                              15:0.06,16:0.15,17:0.07,18:0.05,19:0.03,20:0.03,
-                              21:0.025,22:0.035,23:0.03,25:0.012}
+            # landCoverToManning = {0:0.02,2:0.12,3:0.12,4:0.12,5:0.035,6:0.1,7:0.05,8:0.035,
+            #                   9:0.16,10:0.18,11:0.17,12:0.08,13:0.15,14:0.075,
+            #                   15:0.06,16:0.15,17:0.07,18:0.05,19:0.03,20:0.03,
+            #                   21:0.025,22:0.035,23:0.03,25:0.012}
+            # change mannings conversion to match OM2D
+            landCoverToManning = {0:0.02, 2:0.15, 3:0.10, 4:0.05, 5:0.02,
+                                  6:0.037, 7:0.033, 8:0.034, 9:0.1, 10:0.11,
+                                  11:0.1, 12:0.05, 13:0.1, 14:0.048, 15:0.045,
+                                  16:0.1, 17:0.048, 18:0.045, 19:0.04,
+                                  20:0.09, 21:0.02, 22:0.015, 23:0.015, 
+                                  24:0.09, 25:0.01}
             
+            # landCoverValues = [0,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,25]
+            # add landcover 24
             landCoverValues = [0,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,25]
-        
             # covert values
         
             for value in landCoverValues:
@@ -581,6 +603,12 @@ class subgridCalculatormain():
                         cadvMiddleTermList = np.zeros(num_SfcElevs)
         
                     countInSubElement = 0
+                    
+                    # create a list of max elevation to keep track of elevation within 
+                    # each subelement then at the end of all the loops take the max
+                    # elevation and put it in the maxElevation array
+                
+                    maxElevationTemp = []
                 
                     # loop through each subsubelement then add quantities together
                     # to get averages over entire subelement
@@ -646,7 +674,7 @@ class subgridCalculatormain():
                                             len(zCutGeoTiffMatrix2[0,:])))*areaDif)
                     
                     
-                        # mask to fine which cells are within a subsubelement
+                        # mask to find which cells are within a subsubelement
                     
                         mask = subgridCalculatormain.isInside(xCurrSubElement[0],yCurrSubElement[0],
                                                               xCurrSubElement[1],yCurrSubElement[1],
@@ -685,6 +713,10 @@ class subgridCalculatormain():
                         # sub element 
                     
                         tempTotWatDepthArray = np.subtract(tempSurfaceElevArray,zCutGeoTiffMatrix2[:,:,None])
+                        
+                        # max elevation
+                        
+                        maxElevationTemp.append(np.max(zCutGeoTiffMatrix2[mask]))
                     
                         # only look at cells within the subsubelement
                     
@@ -781,7 +813,10 @@ class subgridCalculatormain():
                     # for wet averaged cf
                     ########### THIS IS WHAT I NORMALLY USE #################
                     cf[ele,j,:] = cfSubElementList/wetDrySubElementList
-            
+                
+                    # get the max elevation of the subgelement
+                    maxElevationSubEle[ele,j] = max(maxElevationTemp)
+                    
                     if level0andLevel1:
                         # for this rv we average the bottom and top terms separatly over the whole subelement
                         rv[ele,j,:] = wetAvgTotWatDepth/(rvBottomTermList/wetDrySubElementList)
@@ -794,6 +829,10 @@ class subgridCalculatormain():
                         cadv[ele,j,:] = (1/(wetAvgTotWatDepth)) \
                             *(cadvMiddleTermList/wetDrySubElementList)*rv[ele,j,:]**2
                         
+                #### ADD MAX ELEVATION ###
+                    
+                maxElevationEle[ele] = np.max(maxElevationSubEle[ele,:])
+                
                 countElementLoop += 1
                 stopTime = time.perf_counter()
                 print("Finished Element {0} of {1} in DEM {2} took {3}".format(countElementLoop,len(elementList),i,stopTime - startTime))
@@ -821,6 +860,10 @@ class subgridCalculatormain():
         vertexArea = np.zeros((numVert,num_SfcElevs))
         cfVertex = np.zeros((numVert,num_SfcElevs))
         
+        # add max elevation
+        maxElevationVertex = np.ones(numVert)*-99999
+    
+        
         # now fill non subgrid spaces with -99999
         
         wetFractionVertex[np.where(binaryVertexList == 0),:] = -99999
@@ -828,6 +871,7 @@ class subgridCalculatormain():
         gridTotWatDepthVertex[np.where(binaryVertexList == 0),:] = -99999
         vertexArea[np.where(binaryVertexList == 0),:] = -99999
         cfVertex[np.where(binaryVertexList == 0),:] = -99999
+        maxElevationVertex[np.where(binaryVertexList == 0)] = -99999
 
         
         if level0andLevel1:
@@ -863,6 +907,19 @@ class subgridCalculatormain():
                 cf1 = cf[j,0,:]
                 cf2 = cf[j,1,:]
                 cf3 = cf[j,2,:]
+                
+                # add max elevation
+                if(maxElevationVertex[nm1] < maxElevationSubEle[j,0]):
+                    
+                    maxElevationVertex[nm1] = maxElevationSubEle[j,0]
+            
+                if(maxElevationVertex[nm2] < maxElevationSubEle[j,1]):
+                    
+                    maxElevationVertex[nm2] = maxElevationSubEle[j,1]
+                    
+                if(maxElevationVertex[nm3] < maxElevationSubEle[j,2]):
+                    
+                    maxElevationVertex[nm3] = maxElevationSubEle[j,2]
                 
                 vertexArea[nm1,:] += area[j,0]
                 vertexArea[nm2,:] += area[j,1]
@@ -1016,6 +1073,14 @@ class subgridCalculatormain():
         binaryVertexListVariable = ncFile.createVariable('binaryVertexList',np.int,
                                                           ('numNode'))
         
+        # write max Elevation
+        
+        maxElevationEleVariable = ncFile.createVariable('maxElevationElement',np.float32,
+                                                     ('numEle'))
+        maxElevationVertexVariable = ncFile.createVariable('maxElevationVertex',
+                                                           np.float32,
+                                                           ('numNode'))
+        
         if level0andLevel1:
             # vertex coefficient of friction level 1
             cmfVarVertex = ncFile.createVariable('cmfVertex',np.float32,
@@ -1037,6 +1102,9 @@ class subgridCalculatormain():
         cfVarVertex[:,:] = cfVertex
         binaryElementListVariable[:] = binaryElementList
         binaryVertexListVariable[:] = binaryVertexList
+        # add max elevation cal
+        maxElevationEleVariable[:] = maxElevationEle
+        maxElevationVertexVariable[:] = maxElevationVertex
         # cfVarElement[:,:,:] = cf
         if level0andLevel1:
             
@@ -1112,6 +1180,8 @@ class subgridCalculatormain():
         cmfVertex = np.asarray(lookupTable['cmfVertex'])
         binaryElementList = np.asarray(lookupTable['binaryElementList'][:])
         binaryVertexList = np.asarray(lookupTable['binaryVertexList'][:])
+        maxElevationEle = np.asarray(lookupTable['maxElevationElement'][:])
+        maxElevationVertex = np.asarray(lookupTable['maxElevationVertex'][:])
         
         # create desired phi list
         
@@ -1320,6 +1390,14 @@ class subgridCalculatormain():
         binaryVertexListVariable = ncFile.createVariable('binaryVertexList',np.int,
                                                                   ('numNode'))
         
+        # write max Elevation
+        
+        maxElevationEleVariable = ncFile.createVariable('maxElevationElement',np.float32,
+                                                     ('numEle'))
+        
+        maxElevationVertexVariable = ncFile.createVariable('maxElevationVertex',np.float32,
+                                                     ('numNode'))
+        
         if level0andLevel1:
             # vertex coefficient of friction level 1
             cmfVarVertex = ncFile.createVariable('cmfVertex',np.float32,
@@ -1342,6 +1420,11 @@ class subgridCalculatormain():
         cfVarVertex[:,:] = cfVertex
         binaryElementListVariable[:] = binaryElementList
         binaryVertexListVariable[:] = binaryVertexList
+        # add max elevation cal
+        maxElevationEleVariable[:] = maxElevationEle
+        maxElevationVertexVariable[:] = maxElevationVertex
+        
+        
         # cfVarElement[:,:,:] = cf
         if level0andLevel1:
             
