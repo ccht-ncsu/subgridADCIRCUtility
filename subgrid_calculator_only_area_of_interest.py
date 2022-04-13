@@ -376,8 +376,8 @@ class subgridCalculatormain():
         
         # now delete double counted vertices and elements
         
-        containedElementList0Index = np.unique(containedElementList0Index)
-        containedVertexList0Index = np.unique(containedVertexList0Index)
+        containedElementList0Index = np.unique(containedElementList0Index).astype(int)
+        containedVertexList0Index = np.unique(containedVertexList0Index).astype(int)
         
         # now I want to create a list of 1s and 0s to show whether or not a
         # vertex or element is in the subgrid region
