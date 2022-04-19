@@ -533,7 +533,7 @@ class subgridCalculatormain():
             # for ele in elementList[:2]:
                 
                 # cast ele to integer
-                ele = int(elementList[i])
+                # ele = int(elementList[i])
                 
                 startTime = time.perf_counter()
             
