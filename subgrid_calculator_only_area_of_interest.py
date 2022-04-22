@@ -2422,7 +2422,7 @@ class subgridCalculatormain():
         areaVar[:,:] = area
         totWatDepthVar[:,:,:] = totWatDepth.T
         # phiMinDepthVar[:] = phiMinDepth
-        surfaceElevationsVar[:] = surfaceElevations
+        surfaceElevationsVar[:] = cp.ndarray.get(surfaceElevations)
         wetTotWatDepthVarVertex[:,:] = wetTotWatDepthVertex
         gridTotWatDepthVarVertex[:,:] = gridTotWatDepthVertex
         cfVarVertex[:,:] = cfVertex
