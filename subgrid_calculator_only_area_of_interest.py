@@ -335,6 +335,7 @@ class subgridCalculatormain():
         
         containedElementList0Index = []
         containedVertexList0Index = []
+        noElementDEMs = []
         
         for i in range(len(demFilenameList)):
         
@@ -348,7 +349,10 @@ class subgridCalculatormain():
             elementDict["DEM%s"%i] = totalEleInfoTable[whichAreInside,0]
             # delete those elements from the total list
             # totalEleInfoTable = np.delete(totalEleInfoTable,whichAreInside,axis=0)
-            
+            # keep track if a dem does not have any elements inside to throw and exception later
+            if len(whichAreInside) == 0:
+                
+                noElementDEMs.append(demFilenameList[i])
             # create a list of elements within subgrid area
             
             containedElementList0Index.append(whichAreInside)
@@ -368,7 +372,16 @@ class subgridCalculatormain():
             
             # totalVertInfoTable = np.delete(totalVertInfoTable,whichAreInside,axis=0)
             
+        # throw exception if a dem has no element and print those dem names
         
+        if(len(noElementDEMs) != 0):
+            
+            for demName in noElementDEMs:
+                
+                print(demName)
+        
+            sys.exit('No elements in the above DEMs, throw those puppies out\n and their matching landcover!\n')
+            
         # now concatenate the lists from above
         
         containedElementList0Index = np.hstack(containedElementList0Index)
