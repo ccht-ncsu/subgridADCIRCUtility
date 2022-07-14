@@ -497,18 +497,11 @@ class subgridCalculatormain():
             #                   15:0.06,16:0.15,17:0.07,18:0.05,19:0.03,20:0.03,
             #                   21:0.025,22:0.035,23:0.03,25:0.012}
             # change mannings conversion to match OM2D
-            # landCoverToManning = {0:0.02, 2:0.15, 3:0.10, 4:0.05, 5:0.02,
-            #                       6:0.037, 7:0.033, 8:0.034, 9:0.1, 10:0.11,
-            #                       11:0.1, 12:0.05, 13:0.1, 14:0.048, 15:0.045,
-            #                       16:0.1, 17:0.048, 18:0.045, 19:0.04,
-            #                       20:0.09, 21:0.02, 22:0.015, 23:0.015, 
-            #                       24:0.09, 25:0.01}
-            # updated to SACS C-CAP mannings table
-            landCoverToManning = {0:0.025, 2:0.12, 3:0.10, 4:0.07, 5:0.035,
-                                  6:0.01, 7:0.055, 8:0.035, 9:0.16, 10:0.18,
-                                  11:0.17, 12:0.08, 13:0.15, 14:0.075, 15:0.07,
-                                  16:0.15, 17:0.07, 18:0.05, 19:0.03,
-                                  20:0.03, 21:0.025, 22:0.035, 23:0.03, 
+            landCoverToManning = {0:0.02, 2:0.15, 3:0.10, 4:0.05, 5:0.02,
+                                  6:0.037, 7:0.033, 8:0.034, 9:0.1, 10:0.11,
+                                  11:0.1, 12:0.05, 13:0.1, 14:0.048, 15:0.045,
+                                  16:0.1, 17:0.048, 18:0.045, 19:0.04,
+                                  20:0.09, 21:0.02, 22:0.015, 23:0.015, 
                                   24:0.09, 25:0.01}
             
             # landCoverValues = [0,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,25]
@@ -1125,6 +1118,40 @@ class subgridCalculatormain():
         
         print('Total Time = {} minutes'.format((endTot-startTot)/60))
         
+        # return phi1011Check, phi1057Check, phi1056Check, phi1013Check, phi1010Check, phi1053Check
+        
+        # # try using a patch plot
+         
+        # plot vertex quantities
+        
+        # fig,ax = plt.subplots(3,1,figsize=(12,9))
+        
+        # ax[0].plot(surfaceElevations,cfVertex[186,:],label='<Cf>W')
+        # # ax[0].plot(surfaceElevations,cfwetVertex[490,:],label='<Cf>W')
+        # if level0andLevel1:
+        #     ax[0].plot(surfaceElevations,cmfVertex[186,:],label='<H>W*Rv^2')
+        #     # ax[0].plot(surfaceElevations,cmfgridVertex[490,:],label='<H>G*Rv^2')
+        #     ax[0].set_title('cf vs cmf')
+        # else:
+        #     ax[0].set_title('cf')
+            
+        # ax[0].legend()
+        
+        # ax[1].plot(surfaceElevations,wetFractionVertex[186,:])     
+        # ax[1].set_title('phi')   
+        
+        # if level0andLevel1:
+        #     ax[2].plot(surfaceElevations,cadvVertex[186,:],label='wetavg')   
+        #     # ax[2].plot(surfaceElevations,cadvgridVertex[490,:],label='gridavg middleG')   
+        #     ax[2].set_title('cadv')  
+        #     ax[2].set_ylim((0,2))
+            
+        # cmap = cmocean.cm.rain
+        # colorLevels = np.arange(0,1.05,0.05)
+        # cbarTicks = np.arange(0,1.1,0.1)
+            
+        # adcircToolsModule.resultsPlotter.timestep63plotter(wetFractionVertex[:,200],mesh[1],cmap,
+        #                               colorLevels,cbarTicks,'phi Vertex')
         
 ################ FUNCTION TO DECREASE THE SIZE OF THE LOOKUP TABLE ############
 
@@ -1753,18 +1780,11 @@ class subgridCalculatormain():
             #                   15:0.06,16:0.15,17:0.07,18:0.05,19:0.03,20:0.03,
             #                   21:0.025,22:0.035,23:0.03,25:0.012}
             # change mannings conversion to match OM2D
-            # landCoverToManning = {0:0.02, 2:0.15, 3:0.10, 4:0.05, 5:0.02,
-            #                       6:0.037, 7:0.033, 8:0.034, 9:0.1, 10:0.11,
-            #                       11:0.1, 12:0.05, 13:0.1, 14:0.048, 15:0.045,
-            #                       16:0.1, 17:0.048, 18:0.045, 19:0.04,
-            #                       20:0.09, 21:0.02, 22:0.015, 23:0.015, 
-            #                       24:0.09, 25:0.01}
-            # updated to SACS C-CAP mannings table
-            landCoverToManning = {0:0.025, 2:0.12, 3:0.10, 4:0.07, 5:0.035,
-                                  6:0.01, 7:0.055, 8:0.035, 9:0.16, 10:0.18,
-                                  11:0.17, 12:0.08, 13:0.15, 14:0.075, 15:0.07,
-                                  16:0.15, 17:0.07, 18:0.05, 19:0.03,
-                                  20:0.03, 21:0.025, 22:0.035, 23:0.03, 
+            landCoverToManning = {0:0.02, 2:0.15, 3:0.10, 4:0.05, 5:0.02,
+                                  6:0.037, 7:0.033, 8:0.034, 9:0.1, 10:0.11,
+                                  11:0.1, 12:0.05, 13:0.1, 14:0.048, 15:0.045,
+                                  16:0.1, 17:0.048, 18:0.045, 19:0.04,
+                                  20:0.09, 21:0.02, 22:0.015, 23:0.015, 
                                   24:0.09, 25:0.01}
             
             # landCoverValues = [0,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,25]
@@ -2446,262 +2466,38 @@ class subgridCalculatormain():
         
         print('Total Time = {} minutes'.format((endTot-startTot)/60))
         
-########################## MAKE A NEW RESULTS CLASS ###########################
-
-class subgridResultsProcessing():
-    
-    def read63(filename):
+        # return phi1011Check, phi1057Check, phi1056Check, phi1013Check, phi1010Check, phi1053Check
         
-        if filename.endswith('.nc'):
+        # # try using a patch plot
+         
+        # plot vertex quantities
         
-            import netCDF4 as nc
-            import numpy as np
+        # fig,ax = plt.subplots(3,1,figsize=(12,9))
         
-            # read the dataset
-        
-            ds = nc.Dataset(filename)
-        
-            zeta = ds['zeta'][:]
-            numTS = len(zeta)
-        
-            return np.asarray(zeta), numTS
-        
-        if filename.endswith('.63'):
+        # ax[0].plot(surfaceElevations,cfVertex[186,:],label='<Cf>W')
+        # # ax[0].plot(surfaceElevations,cfwetVertex[490,:],label='<Cf>W')
+        # if level0andLevel1:
+        #     ax[0].plot(surfaceElevations,cmfVertex[186,:],label='<H>W*Rv^2')
+        #     # ax[0].plot(surfaceElevations,cmfgridVertex[490,:],label='<H>G*Rv^2')
+        #     ax[0].set_title('cf vs cmf')
+        # else:
+        #     ax[0].set_title('cf')
             
-            import numpy as np
+        # ax[0].legend()
         
-            with open(filename) as fort63File:
-    
-                line = fort63File.readline()
-                line = fort63File.readline().split()
-                numTS = int(line[0])
-                numVert = int(line[1])
+        # ax[1].plot(surfaceElevations,wetFractionVertex[186,:])     
+        # ax[1].set_title('phi')   
+        
+        # if level0andLevel1:
+        #     ax[2].plot(surfaceElevations,cadvVertex[186,:],label='wetavg')   
+        #     # ax[2].plot(surfaceElevations,cadvgridVertex[490,:],label='gridavg middleG')   
+        #     ax[2].set_title('cadv')  
+        #     ax[2].set_ylim((0,2))
             
-                wseArray = np.zeros((numVert,numTS))
+        # cmap = cmocean.cm.rain
+        # colorLevels = np.arange(0,1.05,0.05)
+        # cbarTicks = np.arange(0,1.1,0.1)
             
-                for i in range(numTS):
-                
-                    line = fort63File.readline()
-                
-                    for j in range(numVert):
+        # adcircToolsModule.resultsPlotter.timestep63plotter(wetFractionVertex[:,200],mesh[1],cmap,
+        #                               colorLevels,cbarTicks,'phi Vertex')           
                     
-                        line = fort63File.readline().split()
-                    
-                        wseArray[j,i] = float(line[1])
-            # flip wse array to match .nc
-            
-            return wseArray.T, numTS
-        
- ######################## INTERPOLATE SUIMULATION RESULTS TO GRID ###################
-    def visulization2D(meshfile,resultfile,demfile,outputDir,subgridYN,
-                       TS,extent):
-
-        import numpy as np
-        from osgeo import gdal
-        import matplotlib.pyplot as plt
-        from scipy.interpolate import griddata, RegularGridInterpolator
-        import pandas as pd
-        from matplotlib.colors import LightSource
-        import cmocean
-        
-        # read mesh file
-        
-        mesh = subgridCalculatormain.readMesh(meshfile)
-        lonlatMeshCoords = np.array([mesh[0]['Longitude'],mesh[0]['Latitude']]).T
-
-        print('Mesh Reading Completed')
-
-        wlResults = subgridResultsProcessing.read63(resultfile)
-
-        print('Result Reading Completed')
-        
-        # set -999999 results to nan
-
-        wlResults[0][wlResults[0] < -1000] = np.nan
-
-        # now import bathymetry file
-
-        bathyTopo = gdal.Open(demfile)
-
-        # read this as an array
-
-        bathyTopoArray = bathyTopo.GetRasterBand(1).ReadAsArray()
-        
-        gt = bathyTopo.GetGeoTransform()
-
-        # separate out into variables
-
-        lonRes = gt[1] # resolution of longitude
-        latRes = gt[5] # resolution of latitude
-        lonMin = gt[0] # minimum longitude 
-        latMax = gt[3] # maximum latitude
-        lonSize = bathyTopo.RasterXSize # number of longitude cells
-        latSize = bathyTopo.RasterYSize # number of latitude cells
-        lonStart = lonMin + lonRes/2
-        latStart = latMax + latRes/2
-        
-        bathyTopo = None
-
-        print('Bathy Topo Reading Completed')
-        
-        # create latitude and longitude arrays
-
-        longitudeArray = np.arange(lonStart, lonStart + lonSize*lonRes, lonRes)
-        latitudeArray = np.arange(latStart, latStart + latSize*latRes, latRes)
-        
-        minRow = np.where(latitudeArray <= extent[3])[0][0]
-        maxRow = np.where(latitudeArray >= extent[2])[0][-1]
-                
-        minCol = np.where(longitudeArray >= extent[0])[0][0]
-        maxCol = np.where(longitudeArray <= extent[1])[0][-1]
-        
-        [longitudeArray,latitudeArray] = np.meshgrid(longitudeArray,latitudeArray)
-                  
-        longitudeArrayCut = longitudeArray[minRow:maxRow+1,minCol:maxCol+1]
-        latitudeArrayCut = latitudeArray[minRow:maxRow+1,minCol:maxCol+1]
-        bathyTopoArrayCut = bathyTopoArray[minRow:maxRow+1,minCol:maxCol+1]
-        print('Finished Cutting Bathy/Topo Cutdown')
-        # deallocate the full array
-        longitudeArray = None
-        latitudeArray = None
-        
-        # Turn off interactive plotting to speed up
-
-        plt.ioff()
-        
-        count = 0
-        
-        
-        # only need to adjust water surface elevations if subgrid
-        
-        if (subgridYN):
-            
-            # create temporary water surface array to update
-                
-            tempWL = np.ones(mesh[2])*-1000
-                
-            # create counters for logic
-                
-            countTotWet = 0
-            countTotDry = 0
-            countPartWet = 0
-
-            for j in range(mesh[3]): # loop through elements
-                
-                # get element nodes
-                vertices = mesh[1].triangles[j]
-                nm0 = mesh[1].triangles[j][0]
-                nm1 = mesh[1].triangles[j][1]
-                nm2 = mesh[1].triangles[j][2]
-                
-                wl0 = wlResults[0][TS,nm0]
-                wl1 = wlResults[0][TS,nm1]
-                wl2 = wlResults[0][TS,nm2]
-                
-                # if all are wet break out of statement
-                if((wl0 != -99999.0)and(wl1 != -99999.0)and(wl2 != -99999.0)):
-                    
-                    # break
-                    countTotWet+=1
-                
-                # if all are dry break out of statement
-                
-                elif((wl0 == -99999.0)and(wl1 == -99999.0)and(wl2 == -99999.0)):
-                    
-                    # break
-                    countTotDry+=1
-                
-                # if vertice 0 is wet and the others are dry make the 2 dry mesh[1].triangles equal
-                # to the values of vertice 0 if it has not already been replaced by a higher
-                # value
-                
-                elif((wl0 != -99999.0)and(wl1 == -99999.0)and(wl2 == -99999.0)):
-                    
-                    if(wl0 > tempWL[vertices[1]]):
-                            tempWL[vertices[1]] = wl0
-                    if(wl0 > tempWL[vertices[2]]):
-                            tempWL[vertices[2]] = wl0
-                        
-                    countPartWet += 1
-                        
-                # if vertice 0 and 1 are wet and 2 is dry then make the temp water surface 
-                # value at 2 equal to the average value of 0 and 1 if it has not already been
-                # set to a higher value
-                        
-                elif((wl0 != -99999.0)and(wl1 != -99999.0)and(wl2 == -99999.0)):
-                    
-                    if(((wl0+wl1)/2)>tempWL[vertices[2]]):
-                        
-                        tempWL[vertices[2]] = (wl0+wl1)/2
-                        
-                    countPartWet += 1
-                        
-                
-                # if mesh[1].triangles 1 and 2 are wet and 0 is dry then make the value at 0 equal
-                # to the average of 1 and 2
-                
-                elif((wl0 == -99999.0)and(wl1 != -99999.0)and(wl2 != -99999.0)):
-                    
-                    if(((wl1+wl2)/2)>tempWL[vertices[0]]):
-                        
-                        tempWL[vertices[0]] = (wl1+wl2)/2
-                        
-                    countPartWet += 1
-                        
-                
-                # if mesh[1].triangles 0 and 1 are dry and 2 is wet make the value of 0 and 1 equal
-                # to the value of 2
-                
-                elif((wl0 == -99999.0)and(wl1 == -99999.0)and(wl2 != -99999.0)):
-                    
-                    if(wl2 > tempWL[vertices[0]]):
-                        tempWL[vertices[0]] = wl2
-                    if(wl2 > tempWL[vertices[1]]):
-                        tempWL[vertices[1]] = wl2
-                    countPartWet += 1  
-                    
-                # dry wet dry
-                
-                elif((wl0 == -99999.0)and(wl1 != -99999.0)and(wl2 == -99999.0)):
-                    
-                    if(wl1 > tempWL[vertices[0]]):
-                        tempWL[vertices[0]] = wl1
-                    if(wl1 > tempWL[vertices[2]]):
-                        tempWL[vertices[2]] = wl1    
-                    countPartWet += 1   
-                    
-                # wet dry wet   
-                
-                elif((wl0 != -99999.0)and(wl1 == -99999.0)and(wl2 != -99999.0)):
-                    
-                    if(((wl0+wl2)/2)>tempWL[vertices[1]]):
-                        
-                        tempWL[vertices[1]] = (wl0+wl2)/2
-                    countPartWet += 1    
-                # dry dry wet   
-                
-                elif((wl0 == -99999.0)and(wl1 == -99999.0)and(wl2 != -99999.0)):
-                    
-                    if(wl2 > tempWL[vertices[0]]):
-                        tempWL[vertices[0]] = wl2
-                    if(wl2 > tempWL[vertices[1]]):
-                        tempWL[vertices[1]] = wl2
-            
-                    countPartWet += 1
-                
-            # now adjust the water surface elevation of the permanant array
-            
-            wlResults[0][TS,np.where(tempWL != -1000)] = tempWL[np.where(tempWL != -1000)]
-            
-        ############### INTERPOLATE WATERLEVELS TO GRID #######################
-        
-        wlGrid = griddata(lonlatMeshCoords,wlResults[0][TS,:],
-                          (longitudeArrayCut,latitudeArrayCut),method = 'linear')
-        
-        ################ PERFORM RASTER SUBTRACTION ############################
-
-        wlGrid[wlGrid >= bathyTopoArrayCut] = wlGrid[np.where(wlGrid >= bathyTopoArrayCut)]
-        # null any cells that have water surface elevation below bathymetry
-        wlGrid[wlGrid < bathyTopoArrayCut] = np.nan
-        
-        return wlGrid, bathyTopoArrayCut, longitudeArrayCut, latitudeArrayCut
