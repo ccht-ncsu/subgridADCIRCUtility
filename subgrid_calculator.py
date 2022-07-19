@@ -2705,3 +2705,87 @@ class subgridResultsProcessing():
         wlGrid[wlGrid < bathyTopoArrayCut] = np.nan
         
         return wlGrid, bathyTopoArrayCut, longitudeArrayCut, latitudeArrayCut
+    
+######################## GET TEXT FILE WITH MESH RESOLUTION ###################
+    
+    def meshResolution(meshObject,outputFilename):
+        
+        import numpy  as np
+        
+        # get the mesh connectivity 
+        
+        meshConnectivity = meshObject[1].triangles
+        
+        # get the x and y of mesh Vertices
+        
+        allVertLon = meshObject[0]['Longitude']
+        allVertLat = meshObject[0]['Latitude']
+        
+        # create empty list of lists
+        
+        connectedVertices = [ [] for _ in range(meshObject[2]) ]
+        
+        # create array to hold distances
+        distToConnectedVertices = np.zeros(meshObject[2])
+       
+        # get vertex connectivity
+        
+        for i in range(meshObject[3]):
+            
+            currMeshConn = meshConnectivity[i]
+            
+            nm0 = currMeshConn[0]
+            nm1 = currMeshConn[1]
+            nm2 = currMeshConn[2]
+            
+            connectedVertices[nm0] = connectedVertices[nm0] + [currMeshConn[1],currMeshConn[2]]
+            connectedVertices[nm1] = connectedVertices[nm1] + [currMeshConn[0],currMeshConn[2]]
+            connectedVertices[nm2] = connectedVertices[nm2] + [currMeshConn[0],currMeshConn[1]]
+        
+        
+        # get unique values and calulate distances
+        
+        for i in range(meshObject[2]):
+
+            # get unique values 
+            connectedVertices[i] = np.array(connectedVertices[i])
+            connectedVertices[i] = np.unique(connectedVertices[i])
+            
+            # get x y of vertex of interest
+            
+            vertLon = allVertLon[i]
+            vertLat = allVertLat[i]
+            
+            # now get the x y of the connected vertices
+            
+            conVertLon = allVertLon[connectedVertices[i]]
+            conVertLat = allVertLat[connectedVertices[i]]
+        
+            # now calculate distances
+            
+            conVertDistances = np.sqrt((conVertLon - vertLon)**2 +
+                                       (conVertLat - vertLat)**2) * 111/0.001 # convert to meters
+            
+            # average these
+            
+            convertDistancesMean = np.mean(conVertDistances)
+            
+            # now add this to larger array
+        
+            distToConnectedVertices[i] = convertDistancesMean
+        
+        with open(outputFilename,'w+') as meshRes:
+            
+            meshRes.write('Averaged distance surrounding each vertex\n')
+            
+            for i in range(meshObject[2]):
+                
+                meshRes.write(str(i)+'\t'+str(distToConnectedVertices[i])+'\n')        
+                
+            
+        
+    
+    
+    
+        
+        
