@@ -1466,6 +1466,7 @@ class subgridCalculatormain():
         import time
         from netCDF4 import Dataset
         import cupy as cp
+        import matplotlib.pyplot as plt
 
         # set the directory for everything to happen
         
@@ -1773,7 +1774,8 @@ class subgridCalculatormain():
 
         # specify buffer to use in area calculator
         
-        areaDif = 0.00001 
+        # areaDif = 0.00001 
+        areaDif = 0.00000001 
         
         # create variable to keep track of what DEM you have read in
         
@@ -1866,6 +1868,8 @@ class subgridCalculatormain():
                 
                     nodeX = currXPerimeterPoints[j]
                     nodeY = currYPerimeterPoints[j]
+                    
+                    # print(nodeX,nodeY)
                 
                     otherXs = np.delete(currXPerimeterPoints,j)
                     otherYs = np.delete(currYPerimeterPoints,j)
@@ -1926,12 +1930,12 @@ class subgridCalculatormain():
                         yCurrSubElement = [nodeY, currEleYCenteroid, midYs[k]]
                         
                         xySubArray = np.array((xCurrSubElement,yCurrSubElement)).T
-                        
+                        # print(xySubArray)
                         # convert to meters for area calculations
                         
                         xyCurrSubElementMeters = subgridCalculatormain.projectMeshToMercator(xySubArray[:,1],
                                                                           xySubArray[:,0])
-                    
+                        # print(xyCurrSubElementMeters)
                         
                         # calculate the area of the subsubelement
                         
@@ -2125,6 +2129,14 @@ class subgridCalculatormain():
                         # tempcf = np.nansum(tempcf,axis=0)
                         tempcf = cp.nansum(tempcf,axis=0)
                         cfSubElementList += tempcf
+                    
+                        # plot subarrea and dem cells inside
+                        # fig,ax = plt.subplots(1,1)
+                        # # ax.set_aspect('equal')
+                        # ax.plot(xCurrSubElement,yCurrSubElement)
+                        # masknumpy = cp.ndarray.get(mask)
+                        # img = ax.scatter(xCutGeoTiffMatrix2,yCutGeoTiffMatrix2,c=masknumpy)
+                        # fig.colorbar(img)
                         # subsubCalcEndTime = time.perf_counter()
                         # print(subsubCalcEndTime-subsubCalcStartTime)
                     # Okay now we can calculate the averaged variable values for each
@@ -2141,6 +2153,10 @@ class subgridCalculatormain():
                     
                 #     # jlw I think the next calulation will give nan regardless
                 #     # wetDrySubElementList[wetDrySubElementList == 0] = np.nan
+                   
+                    # print(countInSubElement)
+                    # print(wetDrySubElementList)
+                    
                     wetAvgTotWatDepth = totWatSubElementList/wetDrySubElementList
                     gridAvgTotWatDepth = totWatSubElementList/countInSubElement
                     wetFractionTemp = wetDrySubElementList/countInSubElement
@@ -2184,9 +2200,10 @@ class subgridCalculatormain():
                     # cf[ele,j,:] = cfSubElementList/wetDrySubElementList
                     # cf[ele,j,:] = cp.asnumpy(cfTemp)
                     cf[ele,j,:] = cp.ndarray.get(cfTemp)
+                    # print(cf[ele,j,:])
                     # get the max elevation of the subgelement
                     maxElevationSubEle[ele,j] = max(maxElevationTemp)
-                    
+                    # print(area[ele,j])
                     if level0andLevel1:
                         
                         # for this rv we average the bottom and top terms separatly over the whole subelement
@@ -2504,6 +2521,7 @@ class subgridCalculatormain():
         import netCDF4 as nc
         import numpy as np
         import time
+        import matplotlib.pyplot as plt
 
         
         # add a path to wherever the subgrid calculator script is
@@ -2547,8 +2565,8 @@ class subgridCalculatormain():
         mesh = sc.subgridCalculatormain.readMesh(meshFilename)
         
         meshConnectivity = mesh[1].triangles
-        meshLon = np.asarray(mesh[0]['Longitude']).astype('float32')
-        meshLat = np.asarray(mesh[0]['Latitude']).astype('float32')
+        meshLon = np.asarray(mesh[0]['Longitude']).astype('float64')
+        meshLat = np.asarray(mesh[0]['Latitude']).astype('float64')
         numNode = mesh[2]
         numEle = mesh[3]
         
@@ -2826,6 +2844,7 @@ class subgridCalculatormain():
             countElementLoop = 0
         
             for ele in elementList:
+            # for ele in range(2):
                 
                 start = time.time()
                 
@@ -2846,6 +2865,8 @@ class subgridCalculatormain():
                 
                 nodeLon = meshLon[nodeNumbers]
                 nodeLat = meshLat[nodeNumbers]
+                
+                # print(nodeLon[0],nodeLat[0])
             
                 # now get the centroid of the element
                 
@@ -2858,13 +2879,30 @@ class subgridCalculatormain():
                 midLat = []
                 
                 midIndex = [[0,1],[1,2],[2,0]]
+                # midIndex = [[2,0],[0,1],[1,2]]
+
             
                 for j in range(3):
                     
                     midLon.append(np.mean(nodeLon[midIndex[j]]))
                     midLat.append(np.mean(nodeLat[midIndex[j]]))
+                
+                
+                # fig,ax = plt.subplots()
+                # ax.plot(nodeLon,nodeLat,'b.')
+                # ax.plot(midLon,midLat,'r.')
+                # ax.plot(centroidLon,centroidLat,'kx')
+                # nodes = ['0','1','2']
+                # mids = ['0-1','1-2','2-0']
+                # for p in range(len(midIndex)):
+                #     ax.annotate(nodes[p], (nodeLon[p],nodeLat[p]),
+                #                 textcoords='offset points',ha='center',
+                #                 xytext=(0,10))
+                #     ax.annotate(mids[p], (midLon[p],midLat[p]),
+                #                 textcoords='offset points',ha='center',
+                #                 xytext=(0,10))
                     
-                subAreaIndex = [[0,1],[1,2],[2,0]]
+                # subAreaIndex = [[0,1],[1,2],[2,0]]
                 
                 # now get quad sub area perimeters
                 
@@ -2873,9 +2911,12 @@ class subgridCalculatormain():
                 subAreaPerimeter = np.zeros((2,4))
                 
                 # perimeter index
-                perIndex = [[0,1,1],
-                            [1,2,2],
-                            [2,0,0]]
+                # perIndex = [[0,1,1],
+                #             [1,2,2],
+                #             [2,0,0]]
+                perIndex = [[0,0,2],
+                            [0,1,1],
+                            [1,2,2]]
                 
                 # cut down dem lon lat and make a grid
                 
@@ -2897,7 +2938,7 @@ class subgridCalculatormain():
                                               [centroidLat,midLat[perIndex[j][2]],
                                                nodeLat[perIndex[j][1]],
                                                midLat[perIndex[j][0]]]])
-                    
+
                     
                     # cut down dem and landcover to each sub area
                     
@@ -2922,9 +2963,11 @@ class subgridCalculatormain():
                     # split into 2 triangles
                 
                     tri0 = subAreaPerimeter[:,:3]
+                    
                     # convert to meters
                     tri0Meters = sc.subgridCalculatormain.projectMeshToMercator(tri0[1,:],
                                                                       tri0[0,:])
+                    # print(tri0)
                     tri0Area = sc.subgridCalculatormain.triarea(tri0Meters[0][0], 
                                                                 tri0Meters[1][0],
                                                                 tri0Meters[0][1], 
@@ -2949,8 +2992,14 @@ class subgridCalculatormain():
                                                                     lonGrid, latGrid, 0.00000001)
                     
                     tri1 = subAreaPerimeter[:,[0,2,3]]
+                    # print(tri1)
                     tri1Meters = sc.subgridCalculatormain.projectMeshToMercator(tri1[1,:],
                                                                       tri1[0,:])
+                    # print(tri1Meters)
+                    # fig,ax = plt.subplots(1,1)
+                    # ax.plot(tri0Meters[0][:],tri0Meters[1][:],'k')
+                    # ax.plot(tri1Meters[0][:],tri1Meters[1][:],'b')
+                    
                     tri1Area = sc.subgridCalculatormain.triarea(tri1Meters[0][0], 
                                                                 tri1Meters[1][0],
                                                                 tri1Meters[0][1], 
@@ -2982,6 +3031,12 @@ class subgridCalculatormain():
                     
                     cellsInSubElement = np.count_nonzero(insideSubElement)
                     
+                    # if there are no cells within the element the DEM is too coarse
+                    # you must decrease the DEM resolution in this area
+                    if cellsInSubElement == 0:
+    
+                        sys.exit('DEM {0} resolution too coarse!'.format(i))
+                    
                     # get just he bathy topo inside the sub element 
                     
                     bathyTopoInsideSubElement = demBathyTopoCut*insideSubElement
@@ -2994,8 +3049,10 @@ class subgridCalculatormain():
                     
                     area[ele,j] = tri0Area + tri1Area
                     
-                    # now find values above each water level
+                    # print(area[ele,j])
                     
+                    # now find values above each water level
+                    # print(cellsInSubElement)
                     for k in range(num_SfcElevs):
                     # for k in range(100):
                         
@@ -3008,7 +3065,7 @@ class subgridCalculatormain():
                         wetCellsInSubArea = temptotWatDepth > 0.001
                         
                         wetCellsInSubAreaCount = np.count_nonzero(wetCellsInSubArea)
-                        
+                        # print(wetCellsInSubAreaCount)
                         # now set tot water depth of dry cells to 0
                         
                         # temptotWatDepth[temptotWatDepth < 0.001] = 0.0
@@ -3036,9 +3093,11 @@ class subgridCalculatormain():
                         
                             wetTotWatDepth[ele,j,k] = np.nansum(temptotWatDepth)/wetCellsInSubAreaCount
                             
-                            cf[ele,j,k] = np.nansum(tempcf)/wetCellsInSubAreaCount
+                            # cf[ele,j,k] = np.nansum(tempcf)/wetCellsInSubAreaCount
+                            cf[ele,j,k] = np.nansum(tempcf)/cellsInSubElement
                             
                             # integrate only now and then calculate full rv later
+                            # print(cf[ele,j,k])
                             
                             rv[ele,j,k] = totWatDepth[ele,j,k]/(np.nansum(((temptotWatDepth**(3/2))*(tempcf**(-1/2)))/wetCellsInSubAreaCount))
                             
@@ -3117,56 +3176,56 @@ class subgridCalculatormain():
                 cf2 = cf[i,2,:]
                 
                 # add max elevation
-                if(maxElevationVertex[nm0] < maxElevationSubEle[j,0]):
+                if(maxElevationVertex[nm0] < maxElevationSubEle[i,0]):
                     
-                    maxElevationVertex[nm0] = maxElevationSubEle[j,0]
+                    maxElevationVertex[nm0] = maxElevationSubEle[i,0]
             
-                if(maxElevationVertex[nm1] < maxElevationSubEle[j,1]):
+                if(maxElevationVertex[nm1] < maxElevationSubEle[i,1]):
                     
-                    maxElevationVertex[nm1] = maxElevationSubEle[j,1]
+                    maxElevationVertex[nm1] = maxElevationSubEle[i,1]
                     
-                if(maxElevationVertex[nm2] < maxElevationSubEle[j,2]):
+                if(maxElevationVertex[nm2] < maxElevationSubEle[i,2]):
                     
-                    maxElevationVertex[nm2] = maxElevationSubEle[j,2]
+                    maxElevationVertex[nm2] = maxElevationSubEle[i,2]
                 
-                vertexArea[nm0,:] += area[j,0]
-                vertexArea[nm1,:] += area[j,1]
-                vertexArea[nm2,:] += area[j,2]
+                vertexArea[nm0,:] += area[i,0]
+                vertexArea[nm1,:] += area[i,1]
+                vertexArea[nm2,:] += area[i,2]
                 
                 # sum element quantities on vertex 
                 # multiply by area to get area weighted average
                 
-                wetFractionVertex[nm0,:] += phi0 * area[j,0]
-                wetFractionVertex[nm1,:] += phi1 * area[j,1]
-                wetFractionVertex[nm2,:] += phi2 * area[j,2]
+                wetFractionVertex[nm0,:] += phi0 * area[i,0]
+                wetFractionVertex[nm1,:] += phi1 * area[i,1]
+                wetFractionVertex[nm2,:] += phi2 * area[i,2]
                 
-                wetTotWatDepthVertex[nm0,:] += HW0 * area[j,0]
-                wetTotWatDepthVertex[nm1,:] += HW1 * area[j,1]
-                wetTotWatDepthVertex[nm2,:] += HW2 * area[j,2]
+                wetTotWatDepthVertex[nm0,:] += HW0 * area[i,0]
+                wetTotWatDepthVertex[nm1,:] += HW1 * area[i,1]
+                wetTotWatDepthVertex[nm2,:] += HW2 * area[i,2]
                 
-                gridTotWatDepthVertex[nm0,:] += HG0 * area[j,0]
-                gridTotWatDepthVertex[nm1,:] += HG1 * area[j,1]
-                gridTotWatDepthVertex[nm2,:] += HG2 * area[j,2]
+                gridTotWatDepthVertex[nm0,:] += HG0 * area[i,0]
+                gridTotWatDepthVertex[nm1,:] += HG1 * area[i,1]
+                gridTotWatDepthVertex[nm2,:] += HG2 * area[i,2]
                 
-                cfVertex[nm0,:] += cf0 * area[j,0]
-                cfVertex[nm1,:] += cf1 * area[j,1]
-                cfVertex[nm2,:] += cf2 * area[j,2]
+                cfVertex[nm0,:] += cf0 * area[i,0]
+                cfVertex[nm1,:] += cf1 * area[i,1]
+                cfVertex[nm2,:] += cf2 * area[i,2]
                 
-                cmf0 = cmf[j,0,:]
-                cmf1 = cmf[j,1,:]
-                cmf2 = cmf[j,2,:]
+                cmf0 = cmf[i,0,:]
+                cmf1 = cmf[i,1,:]
+                cmf2 = cmf[i,2,:]
                 
-                cadv0 = cadv[j,0,:]
-                cadv1 = cadv[j,1,:]
-                cadv2 = cadv[j,2,:]
+                cadv0 = cadv[i,0,:]
+                cadv1 = cadv[i,1,:]
+                cadv2 = cadv[i,2,:]
             
-                cmfVertex[nm0,:] += cmf0 * area[j,0]
-                cmfVertex[nm1,:] += cmf1 * area[j,1]
-                cmfVertex[nm2,:] += cmf2 * area[j,2]
+                cmfVertex[nm0,:] += cmf0 * area[i,0]
+                cmfVertex[nm1,:] += cmf1 * area[i,1]
+                cmfVertex[nm2,:] += cmf2 * area[i,2]
             
-                cadvVertex[nm0,:] += cadv0 * area[j,0]
-                cadvVertex[nm1,:] += cadv1 * area[j,1]
-                cadvVertex[nm2,:] += cadv2 * area[j,2]
+                cadvVertex[nm0,:] += cadv0 * area[i,0]
+                cadvVertex[nm1,:] += cadv1 * area[i,1]
+                cadvVertex[nm2,:] += cadv2 * area[i,2]
         
         # now average all of these by the vertex areas
         wetFractionVertex[np.where(binaryVertexList == 1)] = wetFractionVertex[np.where(binaryVertexList == 1)]/vertexArea[np.where(binaryVertexList == 1)]
@@ -3216,6 +3275,14 @@ class subgridCalculatormain():
         # now we need to simplify this lookup table
         
         desiredPhiList = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
+        
+        # transpose the dimensions of the elemental subgrid arrays for writing 
+        # netCDF
+        
+        wetFraction = wetFraction.T
+        totWatDepth = totWatDepth.T
+        cadv = cadv.T
+        
         
         # create empty arrays for the reduced tables
         
