@@ -236,6 +236,8 @@ class subgridCalculatormain():
         # import matplotlib.style as style
         import time
         from netCDF4 import Dataset
+        # add re import to allow for spaces in filenames
+        import re
 
         # set the directory for everything to happen
         
@@ -257,25 +259,38 @@ class subgridCalculatormain():
         with open(controlFile) as ctrF:
             
             ctrF.readline()
-            line = ctrF.readline().split()
+            # line = ctrF.readline().split()
+            # change to shintaros r.strip with re to allow for spaces
+            line = ctrF.readline().rstrip()
+            line = re.split(' *= *',line)
             # get output file name
-            outputFilename = line[2]
-            line = ctrF.readline().split()
+            outputFilename = line[1]
+            # line = ctrF.readline().split()
+            line = ctrF.readline().rstrip()
+            line = re.split(' *= *',line)
             # get mesh filename
-            meshFilename = line[2]
-            line = ctrF.readline().split()
-            numDEMs = int(line[2])
+            meshFilename = line[1]
+            # line = ctrF.readline().split()
+            line = ctrF.readline().rstrip()
+            line = re.split(' *= *',line)
+            numDEMs = int(line[1])
             # get list of elevation datasets
             demFilenameList = []
             for i in range(numDEMs):
-                line = ctrF.readline().split()
+                # line = ctrF.readline().split()
+                line = ctrF.readline().rstrip()
+                line = re.split(' *= *',line)
                 demFilenameList.append(line[0])
-            line = ctrF.readline().split()
-            numLCs = int(line[2])
+            # line = ctrF.readline().split()
+            line = ctrF.readline().rstrip()
+            line = re.split(' *= *',line)
+            numLCs = int(line[1])
             # get list of landcover datasets
             landcoverFilenameList = []
             for i in range(numLCs):
-                line = ctrF.readline().split()
+                # line = ctrF.readline().split()
+                line = ctrF.readline().rstrip()
+                line = re.split(' *= *',line)
                 landcoverFilenameList.append(line[0])
                 
         # read in mesh
@@ -1467,6 +1482,8 @@ class subgridCalculatormain():
         from netCDF4 import Dataset
         import cupy as cp
         import matplotlib.pyplot as plt
+        # add re import per shintaro's suggestion
+        import re
 
         # set the directory for everything to happen
         
@@ -1491,25 +1508,38 @@ class subgridCalculatormain():
         with open(controlFile) as ctrF:
             
             ctrF.readline()
-            line = ctrF.readline().split()
+            # line = ctrF.readline().split()
+            # change to shintaros r.strip with re to allow for spaces
+            line = ctrF.readline().rstrip()
+            line = re.split(' *= *',line)
             # get output file name
-            outputFilename = line[2]
-            line = ctrF.readline().split()
+            outputFilename = line[1]
+            # line = ctrF.readline().split()
+            line = ctrF.readline().rstrip()
+            line = re.split(' *= *',line)
             # get mesh filename
-            meshFilename = line[2]
-            line = ctrF.readline().split()
-            numDEMs = int(line[2])
+            meshFilename = line[1]
+            # line = ctrF.readline().split()
+            line = ctrF.readline().rstrip()
+            line = re.split(' *= *',line)
+            numDEMs = int(line[1])
             # get list of elevation datasets
             demFilenameList = []
             for i in range(numDEMs):
-                line = ctrF.readline().split()
+                # line = ctrF.readline().split()
+                line = ctrF.readline().rstrip()
+                line = re.split(' *= *',line)
                 demFilenameList.append(line[0])
-            line = ctrF.readline().split()
-            numLCs = int(line[2])
+            # line = ctrF.readline().split()
+            line = ctrF.readline().rstrip()
+            line = re.split(' *= *',line)
+            numLCs = int(line[1])
             # get list of landcover datasets
             landcoverFilenameList = []
             for i in range(numLCs):
-                line = ctrF.readline().split()
+                # line = ctrF.readline().split()
+                line = ctrF.readline().rstrip()
+                line = re.split(' *= *',line)
                 landcoverFilenameList.append(line[0])
                 
         # read in mesh
@@ -2522,6 +2552,8 @@ class subgridCalculatormain():
         import numpy as np
         import time
         import matplotlib.pyplot as plt
+        # use re to read control file in per Shintaro recommendation
+        import re
 
         
         # add a path to wherever the subgrid calculator script is
@@ -2539,25 +2571,38 @@ class subgridCalculatormain():
         with open(controlFile) as ctrF:
             
             ctrF.readline()
-            line = ctrF.readline().split()
+            # line = ctrF.readline().split()
+            # change to shintaros r.strip with re to allow for spaces
+            line = ctrF.readline().rstrip()
+            line = re.split(' *= *',line)
             # get output file name
-            outputFilename = line[2]
-            line = ctrF.readline().split()
+            outputFilename = line[1]
+            # line = ctrF.readline().split()
+            line = ctrF.readline().rstrip()
+            line = re.split(' *= *',line)
             # get mesh filename
-            meshFilename = line[2]
-            line = ctrF.readline().split()
-            numDEMs = int(line[2])
+            meshFilename = line[1]
+            # line = ctrF.readline().split()
+            line = ctrF.readline().rstrip()
+            line = re.split(' *= *',line)
+            numDEMs = int(line[1])
             # get list of elevation datasets
             demFilenameList = []
             for i in range(numDEMs):
-                line = ctrF.readline().split()
+                # line = ctrF.readline().split()
+                line = ctrF.readline().rstrip()
+                line = re.split(' *= *',line)
                 demFilenameList.append(line[0])
-            line = ctrF.readline().split()
-            numLCs = int(line[2])
+            # line = ctrF.readline().split()
+            line = ctrF.readline().rstrip()
+            line = re.split(' *= *',line)
+            numLCs = int(line[1])
             # get list of landcover datasets
             landcoverFilenameList = []
             for i in range(numLCs):
-                line = ctrF.readline().split()
+                # line = ctrF.readline().split()
+                line = ctrF.readline().rstrip()
+                line = re.split(' *= *',line)
                 landcoverFilenameList.append(line[0])
         
         # first lets import the mesh 
