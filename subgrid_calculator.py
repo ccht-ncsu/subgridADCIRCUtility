@@ -7,6 +7,46 @@ Created on Fri Sep 11 16:17:03 2020
 
 class subgridCalculatormain():
 
+######################## Function to read subgrid control file ###################
+    
+    def readSubgridControlFile(subgridControlFilename):
+        import re
+
+        with open(subgridControlFilename) as ctrF:
+            
+            # skip a line
+            ctrF.readline()
+
+            # get output file name
+            line = ctrF.readline().rstrip()
+            line = re.split(' *= *',line)
+            outputFilename = line[1]
+
+            # get mesh filename
+            line = ctrF.readline().rstrip()
+            line = re.split(' *= *',line)
+            meshFilename = line[1]
+
+            # get list of elevation datasets
+            line = ctrF.readline().rstrip()
+            line = re.split(' *= *',line)
+            numDEMs = int(line[1])
+            demFilenameList = []
+            for i in range(numDEMs):
+                line = ctrF.readline().rstrip()
+                demFilenameList.append(line)
+
+            # get list of landcover datasets
+            line = ctrF.readline().rstrip()
+            line = re.split(' *= *',line)
+            numLCs = int(line[1])
+            landcoverFilenameList = []
+            for i in range(numLCs):
+                line = ctrF.readline().rstrip()
+                landcoverFilenameList.append(line)
+
+        return outputFilename, meshFilename, numDEMs, demFilenameList, numLCs, landcoverFilenameList               
+
 ##################### READ IN A MESH IN FORT.14 FORMAT #######################
     
     def readMesh(meshFilename):
@@ -255,43 +295,9 @@ class subgridCalculatormain():
         controlFile = controlFilename
         
         # read the control file
-        
-        with open(controlFile) as ctrF:
-            
-            ctrF.readline()
-            # line = ctrF.readline().split()
-            # change to shintaros r.strip with re to allow for spaces
-            line = ctrF.readline().rstrip()
-            line = re.split(' *= *',line)
-            # get output file name
-            outputFilename = line[1]
-            # line = ctrF.readline().split()
-            line = ctrF.readline().rstrip()
-            line = re.split(' *= *',line)
-            # get mesh filename
-            meshFilename = line[1]
-            # line = ctrF.readline().split()
-            line = ctrF.readline().rstrip()
-            line = re.split(' *= *',line)
-            numDEMs = int(line[1])
-            # get list of elevation datasets
-            demFilenameList = []
-            for i in range(numDEMs):
-                # line = ctrF.readline().split()
-                line = ctrF.readline().rstrip()
-                line = re.split(' *= *',line)
-                demFilenameList.append(line[0])
-            # line = ctrF.readline().split()
-            line = ctrF.readline().rstrip()
-            line = re.split(' *= *',line)
-            numLCs = int(line[1])
-            # get list of landcover datasets
-            landcoverFilenameList = []
-            for i in range(numLCs):
-                # line = ctrF.readline().split()
-                line = ctrF.readline().rstrip()
-                line = re.split(' *= *',line)
-                landcoverFilenameList.append(line[0])
+        (outputFilename, meshFilename, numDEMs,
+        demFilenameList, numLCs, landcoverFilenameList) \
+            = subgridCalculatormain.readSubgridControlFile(controlFile)
                 
         # read in mesh
         
@@ -1504,43 +1510,9 @@ class subgridCalculatormain():
         np.seterr(invalid='ignore')
         
         # read the control file
-        
-        with open(controlFile) as ctrF:
-            
-            ctrF.readline()
-            # line = ctrF.readline().split()
-            # change to shintaros r.strip with re to allow for spaces
-            line = ctrF.readline().rstrip()
-            line = re.split(' *= *',line)
-            # get output file name
-            outputFilename = line[1]
-            # line = ctrF.readline().split()
-            line = ctrF.readline().rstrip()
-            line = re.split(' *= *',line)
-            # get mesh filename
-            meshFilename = line[1]
-            # line = ctrF.readline().split()
-            line = ctrF.readline().rstrip()
-            line = re.split(' *= *',line)
-            numDEMs = int(line[1])
-            # get list of elevation datasets
-            demFilenameList = []
-            for i in range(numDEMs):
-                # line = ctrF.readline().split()
-                line = ctrF.readline().rstrip()
-                line = re.split(' *= *',line)
-                demFilenameList.append(line[0])
-            # line = ctrF.readline().split()
-            line = ctrF.readline().rstrip()
-            line = re.split(' *= *',line)
-            numLCs = int(line[1])
-            # get list of landcover datasets
-            landcoverFilenameList = []
-            for i in range(numLCs):
-                # line = ctrF.readline().split()
-                line = ctrF.readline().rstrip()
-                line = re.split(' *= *',line)
-                landcoverFilenameList.append(line[0])
+        (outputFilename, meshFilename, numDEMs,
+        demFilenameList, numLCs, landcoverFilenameList) \
+            = subgridCalculatormain.readSubgridControlFile(controlFile)
                 
         # read in mesh
         
@@ -2568,42 +2540,9 @@ class subgridCalculatormain():
         
         controlFile = '../subgrid/GBAY_control.txt'
         
-        with open(controlFile) as ctrF:
-            
-            ctrF.readline()
-            # line = ctrF.readline().split()
-            # change to shintaros r.strip with re to allow for spaces
-            line = ctrF.readline().rstrip()
-            line = re.split(' *= *',line)
-            # get output file name
-            outputFilename = line[1]
-            # line = ctrF.readline().split()
-            line = ctrF.readline().rstrip()
-            line = re.split(' *= *',line)
-            # get mesh filename
-            meshFilename = line[1]
-            # line = ctrF.readline().split()
-            line = ctrF.readline().rstrip()
-            line = re.split(' *= *',line)
-            numDEMs = int(line[1])
-            # get list of elevation datasets
-            demFilenameList = []
-            for i in range(numDEMs):
-                # line = ctrF.readline().split()
-                line = ctrF.readline().rstrip()
-                line = re.split(' *= *',line)
-                demFilenameList.append(line[0])
-            # line = ctrF.readline().split()
-            line = ctrF.readline().rstrip()
-            line = re.split(' *= *',line)
-            numLCs = int(line[1])
-            # get list of landcover datasets
-            landcoverFilenameList = []
-            for i in range(numLCs):
-                # line = ctrF.readline().split()
-                line = ctrF.readline().rstrip()
-                line = re.split(' *= *',line)
-                landcoverFilenameList.append(line[0])
+        (outputFilename, meshFilename, numDEMs,
+        demFilenameList, numLCs, landcoverFilenameList) \
+            = subgridCalculatormain.readSubgridControlFile(controlFile)
         
         # first lets import the mesh 
         
