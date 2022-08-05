@@ -2554,19 +2554,14 @@ class subgridCalculatormain():
         import matplotlib.pyplot as plt
         # use re to read control file in per Shintaro recommendation
         import re
-
-        
-        # add a path to wherever the subgrid calculator script is
-        sys.path.append(r'C:\Users\jlwoodr3\Documents\GitHub\subgridADCIRCUtility')
-        
-        import subgrid_calculator as sc
+        # import subgrid_calculator as sc
         
         # I want to really dig into speed on this code and figure out how to make the
         # the code fast
         
         # first read in the control file
         
-        controlFile = '../subgrid/GBAY_control.txt'
+        controlFile = controlFilename
         
         with open(controlFile) as ctrF:
             
@@ -2607,7 +2602,7 @@ class subgridCalculatormain():
         
         # first lets import the mesh 
         
-        mesh = sc.subgridCalculatormain.readMesh(meshFilename)
+        mesh = subgridCalculatormain.readMesh(meshFilename)
         
         meshConnectivity = mesh[1].triangles
         meshLon = np.asarray(mesh[0]['Longitude']).astype('float64')
@@ -2631,7 +2626,7 @@ class subgridCalculatormain():
         for i in range(len(demFilenameList)):
             
             # read in DEM
-            elevationData = sc.subgridCalculatormain.importDEMv2(demFilenameList[i])
+            elevationData = subgridCalculatormain.importDEMv2(demFilenameList[i])
             # x coordinates of DEM
             # xDEMTemp = elevationData[0]
             # # y coordinates of DEM
@@ -2851,8 +2846,8 @@ class subgridCalculatormain():
             
             # reading in DEM again
             # all variables the same as before
-            elevationData = sc.subgridCalculatormain.importDEMv2(demFilenameList[i])
-            landcoverData = sc.subgridCalculatormain.importDEMv2(landcoverFilenameList[i])
+            elevationData = subgridCalculatormain.importDEMv2(demFilenameList[i])
+            landcoverData = subgridCalculatormain.importDEMv2(landcoverFilenameList[i])
             
             bathyTopo = elevationData[0].astype('float32')
             lonRes = elevationData[1]
@@ -3010,10 +3005,10 @@ class subgridCalculatormain():
                     tri0 = subAreaPerimeter[:,:3]
                     
                     # convert to meters
-                    tri0Meters = sc.subgridCalculatormain.projectMeshToMercator(tri0[1,:],
+                    tri0Meters = subgridCalculatormain.projectMeshToMercator(tri0[1,:],
                                                                       tri0[0,:])
                     # print(tri0)
-                    tri0Area = sc.subgridCalculatormain.triarea(tri0Meters[0][0], 
+                    tri0Area = subgridCalculatormain.triarea(tri0Meters[0][0], 
                                                                 tri0Meters[1][0],
                                                                 tri0Meters[0][1], 
                                                                 tri0Meters[1][1],
@@ -3031,21 +3026,21 @@ class subgridCalculatormain():
                     
                     # lonGrid,latGrid = np.meshgrid(demLonCut,demLatCut)
                     
-                    insideTri0 = sc.subgridCalculatormain.isInside(tri0[0,0], tri0[1,0],
+                    insideTri0 = subgridCalculatormain.isInside(tri0[0,0], tri0[1,0],
                                                                     tri0[0,1], tri0[1,1],
                                                                     tri0[0,2], tri0[1,2],
                                                                     lonGrid, latGrid, 0.00000001)
                     
                     tri1 = subAreaPerimeter[:,[0,2,3]]
                     # print(tri1)
-                    tri1Meters = sc.subgridCalculatormain.projectMeshToMercator(tri1[1,:],
+                    tri1Meters = subgridCalculatormain.projectMeshToMercator(tri1[1,:],
                                                                       tri1[0,:])
                     # print(tri1Meters)
                     # fig,ax = plt.subplots(1,1)
                     # ax.plot(tri0Meters[0][:],tri0Meters[1][:],'k')
                     # ax.plot(tri1Meters[0][:],tri1Meters[1][:],'b')
                     
-                    tri1Area = sc.subgridCalculatormain.triarea(tri1Meters[0][0], 
+                    tri1Area = subgridCalculatormain.triarea(tri1Meters[0][0], 
                                                                 tri1Meters[1][0],
                                                                 tri1Meters[0][1], 
                                                                 tri1Meters[1][1],
@@ -3063,7 +3058,7 @@ class subgridCalculatormain():
                     
                     # lonGrid,latGrid = np.meshgrid(demLonCut,demLatCut)
                     
-                    insideTri1 = sc.subgridCalculatormain.isInside(tri1[0,0], tri1[1,0],
+                    insideTri1 = subgridCalculatormain.isInside(tri1[0,0], tri1[1,0],
                                                                     tri1[0,1], tri1[1,1],
                                                                     tri1[0,2], tri1[1,2],
                                                                     lonGrid, latGrid, 0.00000001)
