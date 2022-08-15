@@ -3776,7 +3776,25 @@ class subgridCalculatormain():
             whichAreInside = list(np.where(totalVertInfoTable[:,3]==1)[0])
             
             containedVertexList0Index.append(whichAreInside)
+        
+        # make sure each dem only has unique element numbers
+        for i in range(len(elementDict)):
             
+            currContainedElements = elementDict['DEM%s'%i]
+            
+            for j in range(i+1,len(elementDict)):
+                
+                currOtherContainedElements = elementDict['DEM%s'%j]
+                overLappingElement = np.intersect1d(currContainedElements,
+                                                    currOtherContainedElements,
+                                                    return_indices=True)
+                # now delete indices in the other dems that correspond with 
+                # ones that have already been read
+                elementDict['DEM%s'%j] = np.delete(elementDict['DEM%s'%j],
+                                                   overLappingElement[2],
+                                                   axis=0)
+
+
         # now concatenate the lists from above
         
         containedElementList0Index = np.hstack(containedElementList0Index)
@@ -4758,8 +4776,8 @@ class subgridCalculatormain():
                                       & ((totalEleInfoTable[:,4])<elevationDict["bounds%s"%i][3]))
         
             whichAreInside = list(np.where(totalEleInfoTable[:,5] == 1)[0])
-            elementDict["DEM%s"%i] = totalEleInfoTable[whichAreInside,0]
-            # delete those elements from the total list
+            elementDict["DEM%s"%i] = totalEleInfoTable[whichAreInside,0].astype('int')
+            # delete those elements fom the total list
             # totalEleInfoTable = np.delete(totalEleInfoTable,whichAreInside,axis=0)
             
             # create a list of elements within subgrid area
@@ -4776,7 +4794,25 @@ class subgridCalculatormain():
             whichAreInside = list(np.where(totalVertInfoTable[:,3]==1)[0])
             
             containedVertexList0Index.append(whichAreInside)
+        
+        # make sure each dem only has unique element numbers
+        for i in range(len(elementDict)):
             
+            currContainedElements = elementDict['DEM%s'%i]
+            
+            for j in range(i+1,len(elementDict)):
+                
+                currOtherContainedElements = elementDict['DEM%s'%j]
+                overLappingElement = np.intersect1d(currContainedElements,
+                                                    currOtherContainedElements,
+                                                    return_indices=True)
+                # now delete indices in the other dems that correspond with 
+                # ones that have already been read
+                elementDict['DEM%s'%j] = np.delete(elementDict['DEM%s'%j],
+                                                   overLappingElement[2],
+                                                   axis=0)
+
+  
         # now concatenate the lists from above
         
         containedElementList0Index = np.hstack(containedElementList0Index)
