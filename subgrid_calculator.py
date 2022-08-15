@@ -4116,6 +4116,10 @@ class subgridCalculatormain():
                     
                     bathyTopoInsideSubElement[bathyTopoInsideSubElement==0] = np.nan
                     
+                    # get maximum elevation inside the sub element
+                    
+                    maxElevationSubEle[ele,j] = np.nanmax(bathyTopoInsideSubElement)
+                    
                     # get area of sub element
                     
                     area[ele,j] = tri0Area + tri1Area
@@ -4180,9 +4184,9 @@ class subgridCalculatormain():
                     
                     cmf[ele,j,:] = wetTotWatDepth[ele,j,:]*rv[ele,j,:]**2
                     
-                    if(ele == 5239):
-                        
-                        print('pause')
+                
+                # get the maximum elevation inside the element
+                maxElevationEle[ele] = np.max(maxElevationSubEle[ele,:])
             
                                         
                 end = time.time()
@@ -5135,6 +5139,9 @@ class subgridCalculatormain():
                     
                     bathyTopoInsideSubElement[bathyTopoInsideSubElement==0] = cp.nan
                     
+                    # get maximum elevation inside the sub element
+                    maxElevationSubEle[ele,j] = cp.asnumpy(cp.nanmax(bathyTopoInsideSubElement))
+                    
                     # get area of sub element
                     
                     area[ele,j] = tri0Area + tri1Area
@@ -5203,7 +5210,10 @@ class subgridCalculatormain():
                     cupycmf = cupywetTotWatDepth*cupyrv**2
                     cmf[ele,j,:] = cp.asnumpy(cupycmf)
             
-                                        
+                
+                # get the maximum elevation inside the element
+                maxElevationEle[ele] = np.max(maxElevationSubEle[ele,:])
+                
                 end = time.time()
                 
                 countElementLoop += 1
