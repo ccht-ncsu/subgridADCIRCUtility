@@ -1,7 +1,7 @@
 # subgridADCIRCUtility
 This set of scripts will create subgrid input files for subgrid enabled ADCIRC.
 
-Example:
+## Example:
 
 The following link will take you to a data repository (need to figure out where to put this) where you will find an example folder containing a text control file and a python script used to call the subgrid calculator for a ADCIRC mesh of Galveston Bay, TX along with several other datafiles needed to perform the subgrid calulations.
 
@@ -28,7 +28,7 @@ The following link will take you to a data repository (need to figure out where 
   - Fully completed subgrid NetCDF lookup files to compare your results to.
   - A mannings n table with non-default values.
   
-PYTHON MODULES NEEDED
+## PYTHON MODULES NEEDED
 
 1. pandas
 2. numpy
@@ -38,3 +38,9 @@ PYTHON MODULES NEEDED
 6. netCDF4
 7. cupy (for GPU)
 8. cmocean (if you want to visualize stuff)
+
+# Gallery
+
+This is an example of the vertex averaged variables produced for Galveston Bay, Texas.
+
+![GBAY_git_figure](https://user-images.githubusercontent.com/50885561/185415534-be3323a8-11ab-4ce1-8b86-e16c98c04f0f.jpeg)
