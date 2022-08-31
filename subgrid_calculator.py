@@ -875,7 +875,7 @@ class subgridCalculatormain():
         vertexArea = np.zeros((numNode,num_SfcElevs))
         cfVertex = np.zeros((numNode,num_SfcElevs))
         cmfVertex = np.zeros((numNode,num_SfcElevs))
-        cadvVertex = np.zeros((numNode,num_SfcElevs))
+        # cadvVertex = np.zeros((numNode,num_SfcElevs))
         maxElevationVertex = np.ones(numNode)*-99999
         
         # now fill non subgrid spaces with -99999
@@ -953,17 +953,17 @@ class subgridCalculatormain():
                 cmf1 = cmf[i,1,:]
                 cmf2 = cmf[i,2,:]
                 
-                cadv0 = cadv[i,0,:]
-                cadv1 = cadv[i,1,:]
-                cadv2 = cadv[i,2,:]
+                # cadv0 = cadv[i,0,:]
+                # cadv1 = cadv[i,1,:]
+                # cadv2 = cadv[i,2,:]
             
                 cmfVertex[nm0,:] += cmf0 * area[i,0]
                 cmfVertex[nm1,:] += cmf1 * area[i,1]
                 cmfVertex[nm2,:] += cmf2 * area[i,2]
             
-                cadvVertex[nm0,:] += cadv0 * area[i,0]
-                cadvVertex[nm1,:] += cadv1 * area[i,1]
-                cadvVertex[nm2,:] += cadv2 * area[i,2]
+                # cadvVertex[nm0,:] += cadv0 * area[i,0]
+                # cadvVertex[nm1,:] += cadv1 * area[i,1]
+                # cadvVertex[nm2,:] += cadv2 * area[i,2]
         
         # now average all of these by the vertex areas
         wetFractionVertex[np.where(binaryVertexList == 1)] = wetFractionVertex[np.where(binaryVertexList == 1)]/vertexArea[np.where(binaryVertexList == 1)]
@@ -971,7 +971,7 @@ class subgridCalculatormain():
         gridTotWatDepthVertex[np.where(binaryVertexList == 1)] = gridTotWatDepthVertex[np.where(binaryVertexList == 1)]/vertexArea[np.where(binaryVertexList == 1)]
         cfVertex[np.where(binaryVertexList == 1)] = cfVertex[np.where(binaryVertexList == 1)]/vertexArea[np.where(binaryVertexList == 1)]
         cmfVertex[np.where(binaryVertexList == 1)] = cmfVertex[np.where(binaryVertexList == 1)]/vertexArea[np.where(binaryVertexList == 1)]
-        cadvVertex[np.where(binaryVertexList == 1)] = cadvVertex[np.where(binaryVertexList == 1)]/vertexArea[np.where(binaryVertexList == 1)]
+        # cadvVertex[np.where(binaryVertexList == 1)] = cadvVertex[np.where(binaryVertexList == 1)]/vertexArea[np.where(binaryVertexList == 1)]
         
         # now we need to check to see if there are any vertices in the subgrid
         # but not connected to any elements in the subgrid 
@@ -996,7 +996,7 @@ class subgridCalculatormain():
                     gridTotWatDepthVertex[i,:] = -99999
                     cfVertex[i,:] = -99999
                     cmfVertex[i,:] = -99999
-                    cadvVertex[i,:] = -99999
+                    # cadvVertex[i,:] = -99999
                         
             # otherwise if vertex is outside subgrid area
             # just make everything -99999
@@ -1008,7 +1008,7 @@ class subgridCalculatormain():
                 gridTotWatDepthVertex[i,:] = -99999
                 cfVertex[i,:] = -99999
                 cmfVertex[i,:] = -99999
-                cadvVertex[i,:] = -99999
+                # cadvVertex[i,:] = -99999
                 
         # now we need to simplify this lookup table
         
@@ -1826,7 +1826,7 @@ class subgridCalculatormain():
         vertexArea = np.zeros((numNode,num_SfcElevs))
         cfVertex = np.zeros((numNode,num_SfcElevs))
         cmfVertex = np.zeros((numNode,num_SfcElevs))
-        cadvVertex = np.zeros((numNode,num_SfcElevs))
+        # cadvVertex = np.zeros((numNode,num_SfcElevs))
         maxElevationVertex = np.ones(numNode)*-99999
         
         # now fill non subgrid spaces with -99999
@@ -1912,9 +1912,9 @@ class subgridCalculatormain():
                 cmfVertex[nm1,:] += cmf1 * area[i,1]
                 cmfVertex[nm2,:] += cmf2 * area[i,2]
             
-                cadvVertex[nm0,:] += cadv0 * area[i,0]
-                cadvVertex[nm1,:] += cadv1 * area[i,1]
-                cadvVertex[nm2,:] += cadv2 * area[i,2]
+                # cadvVertex[nm0,:] += cadv0 * area[i,0]
+                # cadvVertex[nm1,:] += cadv1 * area[i,1]
+                # cadvVertex[nm2,:] += cadv2 * area[i,2]
         
         # now average all of these by the vertex areas
         wetFractionVertex[np.where(binaryVertexList == 1)] = wetFractionVertex[np.where(binaryVertexList == 1)]/vertexArea[np.where(binaryVertexList == 1)]
@@ -1922,7 +1922,7 @@ class subgridCalculatormain():
         gridTotWatDepthVertex[np.where(binaryVertexList == 1)] = gridTotWatDepthVertex[np.where(binaryVertexList == 1)]/vertexArea[np.where(binaryVertexList == 1)]
         cfVertex[np.where(binaryVertexList == 1)] = cfVertex[np.where(binaryVertexList == 1)]/vertexArea[np.where(binaryVertexList == 1)]
         cmfVertex[np.where(binaryVertexList == 1)] = cmfVertex[np.where(binaryVertexList == 1)]/vertexArea[np.where(binaryVertexList == 1)]
-        cadvVertex[np.where(binaryVertexList == 1)] = cadvVertex[np.where(binaryVertexList == 1)]/vertexArea[np.where(binaryVertexList == 1)]
+        # cadvVertex[np.where(binaryVertexList == 1)] = cadvVertex[np.where(binaryVertexList == 1)]/vertexArea[np.where(binaryVertexList == 1)]
         
         # now we need to check to see if there are any vertices in the subgrid
         # but not connected to any elements in the subgrid 
@@ -1947,7 +1947,7 @@ class subgridCalculatormain():
                     gridTotWatDepthVertex[i,:] = -99999
                     cfVertex[i,:] = -99999
                     cmfVertex[i,:] = -99999
-                    cadvVertex[i,:] = -99999
+                    # cadvVertex[i,:] = -99999
                         
             # otherwise if vertex is outside subgrid area
             # just make everything -99999
@@ -1959,7 +1959,7 @@ class subgridCalculatormain():
                 gridTotWatDepthVertex[i,:] = -99999
                 cfVertex[i,:] = -99999
                 cmfVertex[i,:] = -99999
-                cadvVertex[i,:] = -99999
+                # cadvVertex[i,:] = -99999
                 
         # now we need to simplify this lookup table
         
