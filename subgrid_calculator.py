@@ -839,7 +839,8 @@ class subgridCalculatormain():
                     
                     # get corrected bottom friction for level 1 corrections
                     
-                    cmf[ele,j,:] = wetTotWatDepth[ele,j,:]*rv[ele,j,:]**2
+                    # cmf[ele,j,:] = wetTotWatDepth[ele,j,:]*rv[ele,j,:]**2 # this is incorrrect I need <H>G * Rv**2
+                    cmf[ele,j,:] = totWatDepth[ele,j,:]*rv[ele,j,:]**2 # this is correct
                     
                 
                 # get the maximum elevation inside the element
@@ -1790,7 +1791,8 @@ class subgridCalculatormain():
                     cadv[ele,j,:] = cp.asnumpy(cupyadv)
                     
                     # get corrected bottom friction for level 1 corrections
-                    cupycmf = cupywetTotWatDepth*cupyrv**2
+                    # cupycmf = cupywetTotWatDepth*cupyrv**2 # this is incorrrect I need <H>G * Rv**2
+                    cupycmf = cupytotWatDepth*cupyrv**2 # this is correct
                     cmf[ele,j,:] = cp.asnumpy(cupycmf)
             
                 
