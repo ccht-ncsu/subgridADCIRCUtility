@@ -42,5 +42,5 @@ The following link will take you to a data repository (need to figure out where 
 # Gallery
 
 This is an example of the vertex averaged variables produced for Galveston Bay, Texas.
+![GBAY_git_figure_fixed](https://user-images.githubusercontent.com/50885561/189197819-50510dcd-8693-4131-a417-4c7ae2acce1e.jpeg)
 
-![GBAY_git_figure](https://user-images.githubusercontent.com/50885561/185415534-be3323a8-11ab-4ce1-8b86-e16c98c04f0f.jpeg)
