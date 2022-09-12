@@ -826,8 +826,8 @@ class subgridCalculatormain():
                     wetTotWatDepth[ele,j,:] = np.nansum(temptotWatDepth,axis=1)/wetCellsInSubAreaCount
                     
                     # get bottom friction
-
-                    cf[ele,j,:] = np.nansum(tempcf,axis=1)/cellsInSubElement
+                    cf[ele,j,:] = np.nansum(tempcf,axis=1)/wetCellsInSubAreaCount # this is correct I need <Cf>W
+                    # cf[ele,j,:] = np.nansum(tempcf,axis=1)/cellsInSubElement
                     
                     # get rv for advection correction and bottom friction correction
                     
@@ -839,8 +839,8 @@ class subgridCalculatormain():
                     
                     # get corrected bottom friction for level 1 corrections
                     
-                    # cmf[ele,j,:] = wetTotWatDepth[ele,j,:]*rv[ele,j,:]**2 # this is incorrrect I need <H>G * Rv**2
-                    cmf[ele,j,:] = totWatDepth[ele,j,:]*rv[ele,j,:]**2 # this is correct
+                    cmf[ele,j,:] = wetTotWatDepth[ele,j,:]*rv[ele,j,:]**2 # this is corrrect I need <H>W * Rv**2
+                    # cmf[ele,j,:] = totWatDepth[ele,j,:]*rv[ele,j,:]**2 # this is incorrect
                     
                 
                 # get the maximum elevation inside the element
@@ -1779,7 +1779,8 @@ class subgridCalculatormain():
                     wetTotWatDepth[ele,j,:] = cp.asnumpy(cupywetTotWatDepth)
                     
                     # get bottom friction
-                    cupycf = cp.nansum(tempcf,axis=1)/cellsInSubElement
+                    cupycf = cp.nansum(tempcf,axis=1)/wetCellsInSubAreaCount # this is correct I need <Cf>W
+                    # cupycf = cp.nansum(tempcf,axis=1)/cellsInSubElement # this is incorrect
                     cf[ele,j,:] = cp.asnumpy(cupycf)
                     
                     # get rv for advection correction and bottom friction correction
@@ -1791,8 +1792,8 @@ class subgridCalculatormain():
                     cadv[ele,j,:] = cp.asnumpy(cupyadv)
                     
                     # get corrected bottom friction for level 1 corrections
-                    # cupycmf = cupywetTotWatDepth*cupyrv**2 # this is incorrrect I need <H>G * Rv**2
-                    cupycmf = cupytotWatDepth*cupyrv**2 # this is correct
+                    cupycmf = cupywetTotWatDepth*cupyrv**2 # this is corrrect I need <H>W * Rv**2
+                    # cupycmf = cupytotWatDepth*cupyrv**2 # this is incorrect
                     cmf[ele,j,:] = cp.asnumpy(cupycmf)
             
                 
