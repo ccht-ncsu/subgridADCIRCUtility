@@ -861,6 +861,7 @@ class subgridCalculatormain():
                     
         cf[cf<0.0025] = 0.0025
         cmf[cmf<0.0025] = 0.0025   
+        cf[np.isnan(cf)] = 0.0025
         cmf[np.isnan(cmf)] = 0.0025
         cadv[np.isnan(cadv)] = 1.0  
         
@@ -1814,6 +1815,7 @@ class subgridCalculatormain():
                     
         cf[cf<0.0025] = 0.0025
         cmf[cmf<0.0025] = 0.0025   
+        cf[np.isnan(cf)] = 0.0025
         cmf[np.isnan(cmf)] = 0.0025
         cadv[np.isnan(cadv)] = 1.0  
         
