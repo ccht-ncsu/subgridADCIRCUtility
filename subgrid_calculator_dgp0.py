@@ -940,8 +940,9 @@ class SubgridCalculatorDGP0():
             plt.xlim([min(self.mesh.coord['Longitude']), max(self.mesh.coord['Longitude'])])
             plt.ylim([min(self.mesh.coord['Latitude']), max(self.mesh.coord['Latitude'])])
             plt.title(title)
-            plt.show()
+            # plt.show()
             fig.savefig("{:s}/sg_{:s}.png".format(imagePath,figfile),dpi=600,facecolor='white',edgecolor='none')
+            plt.close()
 
         def plotMulti(self,patches,numEle,elemIndex,surfaceElevs,minElevationEle,maxElevationEle,ve,surfElevForPlot,title,figfile):
             import numpy as np
@@ -992,8 +993,9 @@ class SubgridCalculatorDGP0():
                 plt.xlim([min(self.mesh.coord['Longitude']), max(self.mesh.coord['Longitude'])])
                 plt.ylim([min(self.mesh.coord['Latitude']), max(self.mesh.coord['Latitude'])])
                 plt.title("{:s} at Elevation {:.1f}".format(title,se))
-                plt.show()
+                # plt.show()
                 fig.savefig("{:s}/sg_{:s}_{:03d}.png".format(imagePath,figfile,i),dpi=600,facecolor='white',edgecolor='none')
+                plt.close()
 
         surfElevForPlot = np.arange(-5.0,6.0,1.0)
 
@@ -1030,13 +1032,13 @@ class SubgridCalculatorDGP0():
         plotMulti(self,patches,self.mesh.numEle,self.subgridvectorized.elemIndex,
                   self.subgridvectorized.surfaceElevations,
                   self.subgridvectorized.minElevationEle, self.subgridvectorized.maxElevationEle,
-                  self.subgridvectorized.cf,surfElevForPlot,"Elemental Cf","cf")
+                  self.subgridvectorized.cfElement,surfElevForPlot,"Elemental Cf","cf")
 
         # cmf
         if self.level0andLevel1:
             plotMulti(self,patches,self.mesh.numEle,self.subgridvectorized.elemIndex,
                     self.subgridvectorized.surfaceElevations,
                     self.subgridvectorized.minElevationEle, self.subgridvectorized.maxElevationEle,
-                    self.subgridvectorized.cmf,surfElevForPlot,"Elemental CMf","cmf")
+                    self.subgridvectorized.cmfElement,surfElevForPlot,"Elemental CMf","cmf")
 
 
