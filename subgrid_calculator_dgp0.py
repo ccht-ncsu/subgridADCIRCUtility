@@ -40,8 +40,7 @@ class SubgridDepthBased:
 class SubgridCalculatorDGP0():
     """Class to evaluate and hold subgrid data"""
 
-    def __init__(self, subgridControlFilename, level0andLevel1 = True, GPU = True, \
-        numHBasedTableLevels = 11):
+    def __init__(self, subgridControlFilename, level0andLevel1 = True, GPU = True):
         import numpy
 
         self.level0andLevel1 = level0andLevel1  # state if you want level0 and level1 corrections or just level 0
@@ -55,7 +54,9 @@ class SubgridCalculatorDGP0():
             self.xp = numpy
         else:
             self.xp = numpy
-        self.numHBasedTableLevels = numHBasedTableLevels
+        self.surfElevIncrement = 0.1
+        self.maxWatDepthAboveHighestGround = 3.0
+        self.watDepthAboveHighestGroundIncrement = 1.0
 
         self.readSubgridControlFile(subgridControlFilename)
         self.readMeshFile(self.control.meshFilename)
@@ -629,14 +630,18 @@ class SubgridCalculatorDGP0():
             
                 # create array of surface elevations
                 # this is used to calculate the subgrid variables for varying water depths
-                surfElevIncrement = 0.1
+                surfElevIncrement = self.surfElevIncrement
                 minElevFloor = math.floor(minElev*10)/10
+                print(minElev,minElevFloor)
                 surfaceElevations = np.arange(minElevFloor,maxElev+surfElevIncrement,surfElevIncrement)
                 if len(surfaceElevations) < 2:
                     surfaceElevations = np.array([minElev,maxElev]).astype(np.float32)
                 else:
                     surfaceElevations[0] = minElev
                     surfaceElevations[-1] = maxElev
+                r1 = maxElev + self.watDepthAboveHighestGroundIncrement
+                r2 = r1 + self.maxWatDepthAboveHighestGround
+                surfaceElevations = np.append(surfaceElevations, np.arange(r1,r2))
                 num_SfcElevs = len(surfaceElevations)   # number of surface elevations we are running
                 surfaceElevations = cp.asarray(surfaceElevations)
 
@@ -808,9 +813,9 @@ class SubgridCalculatorDGP0():
         self.subgridvectorized.maxElevationEle = maxElevationEle
         self.subgridvectorized.minElevationGlobal = minElevationGlobal
         self.subgridvectorized.maxElevationGlobal = maxElevationGlobal
-        self.subgridvectorized.cfElement = cf
+        self.subgridvectorized.cf = cf
         if self.level0andLevel1:
-            self.subgridvectorized.cmfElement = cmf
+            self.subgridvectorized.cmf = cmf
         self.subgridvectorized.loaded = True
         
     ############## WRITE SUBGRID CORRECTION DATA TO NETCDF FOR VECTORIZED STORAGE ##############
@@ -822,21 +827,23 @@ class SubgridCalculatorDGP0():
         # open netcdf file
         ncFile = Dataset(self.control.outputFilename, mode = 'w', format = 'NETCDF4')
         
+        # Set version number
+        ncFile.data_format = 'v1.0.0'
+
         # create dimensions
         ncFile.createDimension('numEle',self.mesh.numEle)                               # element dimension
         ncFile.createDimension('numNode',self.mesh.numNod)                              # number of nodes in mesh
         ncFile.createDimension('vecLen',len(self.subgridvectorized.surfaceElevations))  # vector length
-        ncFile.createDimension('global',1)                                              # globally single value variable
         
         # create variables
         # write variable dimensions transposed because FORTRAN will read them that way
         # only need to do it for the 3D arrays, handle 2 and 1D a different way.
         
         # indexes showing the locations of elements in the vectorized storage
-        elemIndex = ncFile.createVariable('indexElementList',np.int,'numEle')
+        elemIndex = ncFile.createVariable('elemLocations',np.int,'numEle')
         
         # elemental wet area fraction
-        wetFractionVarElement = ncFile.createVariable('wetFractionElement',np.float32,'vecLen')
+        wetFractionVarElement = ncFile.createVariable('wetFraction',np.float32,'vecLen')
 
         # elemental areas
         areaVar = ncFile.createVariable('area',np.float32,'numEle')
@@ -848,34 +855,33 @@ class SubgridCalculatorDGP0():
         surfaceElevationsVar = ncFile.createVariable('surfaceElevations',np.float32,'vecLen')
         
         # elemental coefficient of friction level 0
-        cfVarElement = ncFile.createVariable('cfElement',np.float32,'vecLen')
+        cfVarElement = ncFile.createVariable('cf',np.float32,'vecLen')
 
         # elemental coefficient of friction level 1
         if self.level0andLevel1:
-            cmfVarElement = ncFile.createVariable('cmfElement',np.float32,'vecLen')
+            cmfVarElement = ncFile.createVariable('cmf',np.float32,'vecLen')
 
         # variables showing which elements are contained within the subgrid area
-        binaryElementListVariable = ncFile.createVariable('binaryElementList',np.int,'numEle')
+        binaryElementListVariable = ncFile.createVariable('binaryList',np.int,'numEle')
         
         # min/max Elevation
-        minElevationEleVariable = ncFile.createVariable('minElevationElement',np.float32,'numEle')
-        maxElevationEleVariable = ncFile.createVariable('maxElevationElement',np.float32,'numEle')
-        minElevationGlobalVariable = ncFile.createVariable('minElevationGlobal',np.float32,'global')
-        maxElevationGlobalVariable = ncFile.createVariable('maxElevationGlobal',np.float32,'global')
+        minElevationEleVariable = ncFile.createVariable('minElevation',np.float32,'numEle')
+        maxElevationEleVariable = ncFile.createVariable('maxElevation',np.float32,'numEle')
         
+        # shift elemIndex to make it begin with 1
+        self.subgridvectorized.elemIndex = \
+            self.subgridvectorized.elemIndex + 1
         elemIndex[:] = self.subgridvectorized.elemIndex
         wetFractionVarElement[:] = self.subgridvectorized.wetFraction
         areaVar[:] = self.subgridvectorized.area
         totWatDepthVar[:] = self.subgridvectorized.totWatDepth
         surfaceElevationsVar[:] = self.subgridvectorized.surfaceElevations
-        cfVarElement[:] = self.subgridvectorized.cfElement
+        cfVarElement[:] = self.subgridvectorized.cf
         if self.level0andLevel1:
-            cmfVarElement[:] = self.subgridvectorized.cmfElement
+            cmfVarElement[:] = self.subgridvectorized.cmf
         binaryElementListVariable[:] = self.subgridvectorized.binaryElementList
         minElevationEleVariable[:] = self.subgridvectorized.minElevationEle
         maxElevationEleVariable[:] = self.subgridvectorized.maxElevationEle
-        minElevationGlobalVariable[:] = self.subgridvectorized.minElevationGlobal
-        maxElevationGlobalVariable[:] = self.subgridvectorized.maxElevationGlobal
         
         ncFile.close()
 
@@ -890,22 +896,31 @@ class SubgridCalculatorDGP0():
         lookupTable = Dataset(self.control.outputFilename)
 
         # read variables
-        self.subgridvectorized.elemIndex = np.asarray(lookupTable['indexElementList'][:])
+        self.subgridvectorized.elemIndex = np.asarray(lookupTable['elemLocations'][:])-1
         self.subgridvectorized.surfaceElevations = np.asarray(lookupTable['surfaceElevations'][:])
-        self.subgridvectorized.wetFraction = np.asarray(lookupTable['wetFractionElement'][:])
+        self.subgridvectorized.wetFraction = np.asarray(lookupTable['wetFraction'][:])
         self.subgridvectorized.area = np.asarray(lookupTable['area'][:])
         self.subgridvectorized.totWatDepth = np.asarray(lookupTable['totWatDepth'][:])
-        self.subgridvectorized.cf = np.asarray(lookupTable['cfElement'][:]).T
+        self.subgridvectorized.cf = np.asarray(lookupTable['cf'][:]).T
         if self.level0andLevel1:
-            self.subgridvectorized.cmf = np.asarray(lookupTable['cmfElement'][:]).T
-        self.subgridvectorized.binaryElementList = np.asarray(lookupTable['binaryElementList'][:])
-        self.subgridvectorized.minElevationEle = np.asarray(lookupTable['minElevationElement'][:])
-        self.subgridvectorized.maxElevationEle = np.asarray(lookupTable['maxElevationElement'][:])
-        self.subgridvectorized.minElevationGlobal = lookupTable['minElevationGlobal'][:]
-        self.subgridvectorized.maxElevationGlobal = lookupTable['maxElevationGlobal'][:]
+            self.subgridvectorized.cmf = np.asarray(lookupTable['cmf'][:]).T
+        self.subgridvectorized.binaryElementList = np.asarray(lookupTable['binaryList'][:])
+        self.subgridvectorized.minElevationEle = np.asarray(lookupTable['minElevation'][:])
+        self.subgridvectorized.maxElevationEle = np.asarray(lookupTable['maxElevation'][:])
+        self.subgridvectorized.minElevationGlobal = lookupTable['minElevation'][:]
+        self.subgridvectorized.maxElevationGlobal = lookupTable['maxElevation'][:]
 
         lookupTable.close()
 
+        ele = 1031
+        idx1 = self.subgridvectorized.elemIndex[ele]
+        idx2 = self.subgridvectorized.elemIndex[ele+1]
+        print('1032=',self.subgridvectorized.surfaceElevations[idx1],self.subgridvectorized.surfaceElevations[idx2-2],self.subgridvectorized.minElevationEle[ele],self.mesh.coord.Elevation[self.mesh.tri[ele,0]],self.mesh.coord.Elevation[self.mesh.tri[ele,1]],self.mesh.coord.Elevation[self.mesh.tri[ele,2]])
+        a = self.subgridvectorized.surfaceElevations[range(idx1,idx2)]
+        b = self.subgridvectorized.totWatDepth[range(idx1,idx2)]
+        idx = np.where(np.logical_and(b > 0.3,b <= 0.9))
+        print(a[idx])
+        print(b[idx])
     ######## Plot subgrid correction data for vectorized storage ########
 
     def plot_subgrid_for_vectorizedstorage(self,imagePath):
@@ -974,6 +989,8 @@ class SubgridCalculatorDGP0():
                                 iend = ii
                             elif surfaceElevs[ii+1] < se:
                                 ista = ii
+                            if ista == iend:
+                                break
                         if found == False:
                             sys.exit("Matching slot not found")
                         r = (se - surfaceElevs[ii])/(surfaceElevs[ii+1] - surfaceElevs[ii])
@@ -1032,13 +1049,13 @@ class SubgridCalculatorDGP0():
         plotMulti(self,patches,self.mesh.numEle,self.subgridvectorized.elemIndex,
                   self.subgridvectorized.surfaceElevations,
                   self.subgridvectorized.minElevationEle, self.subgridvectorized.maxElevationEle,
-                  self.subgridvectorized.cfElement,surfElevForPlot,"Elemental Cf","cf")
+                  self.subgridvectorized.cf,surfElevForPlot,"Elemental Cf","cf")
 
         # cmf
         if self.level0andLevel1:
             plotMulti(self,patches,self.mesh.numEle,self.subgridvectorized.elemIndex,
                     self.subgridvectorized.surfaceElevations,
                     self.subgridvectorized.minElevationEle, self.subgridvectorized.maxElevationEle,
-                    self.subgridvectorized.cmfElement,surfElevForPlot,"Elemental CMf","cmf")
+                    self.subgridvectorized.cmf,surfElevForPlot,"Elemental CMf","cmf")
 
 
