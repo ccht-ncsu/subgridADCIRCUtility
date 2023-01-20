@@ -1493,7 +1493,7 @@ class subgridCalculatormain():
         
         # now create a surface elevation array
         
-        ds = 0.1 # will want to experiment with this and speed
+        ds = 0.5 # will want to experiment with this and speed
         # surface elevation array for caoluations
         surfaceElevations = np.round(np.arange(-20,20+ds,ds),2).astype('float32') 
         
