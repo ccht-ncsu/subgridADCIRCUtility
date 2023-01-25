@@ -3074,7 +3074,7 @@ class subgridCalculatormain():
         cadvForLookup[:,:,np.where(binaryElementList==0)[0]] = -99999
         
         end = time.time()
-        print('Finished Reducing Elemental Tables in {} s'.format(end-start)
+        print('Finished Reducing Elemental Tables in {} s'.format(end-start))
         
         ncFile = nc.Dataset(outputFilename, mode = 'w', format = 'NETCDF4')
         
