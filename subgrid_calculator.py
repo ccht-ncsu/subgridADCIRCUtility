@@ -1496,9 +1496,9 @@ class subgridCalculatormain():
         
         # now create a surface elevation array
         
-        ds = 0.5 # will want to experiment with this and speed
+        ds = 0.2 # will want to experiment with this and speed
         # surface elevation array for caoluations
-        surfaceElevations = np.round(np.arange(-20,20+ds,ds),2).astype('float32') 
+        surfaceElevations = np.round(np.arange(-5,5+ds,ds),2).astype('float32') 
         
         # preallocate necessary arrays
         numEle = mesh[3]
@@ -3177,7 +3177,7 @@ class subgridCalculatormain():
         
 ##################### SUBGRID CPU CALULATOR DEV ################################
 
-##################### SUBGRID GPU CALULATOR V4 ################################
+##################### SUBGRID GPU CALULATOR DEV ################################
 # Now use the v4 code and add GPU functionality
 
     def calculateSubgridCorrectionDevGPU(controlFilename):
@@ -4085,7 +4085,7 @@ class subgridCalculatormain():
         
 ##################### SUBGRID CPU CALULATOR DEV ################################
 
-    def calculateSubgridCorrectionv4(controlFilename):
+    def calculateSubgridCorrectionDev(controlFilename):
         
         import sys
         import netCDF4 as nc
