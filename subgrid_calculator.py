@@ -4751,6 +4751,8 @@ class subgridCalculatormain():
         start = time.time()
         
         meshConnectivityInSubgrid = meshConnectivity[containedElementList0Index]
+        # now flatten this and only take unique numbers to make list smaller
+        meshConnectivityInSubgrid = np.unique(meshConnectivityInSubgrid)
         
         for vertex in containedVertexList0Index:
             
@@ -4809,7 +4811,7 @@ class subgridCalculatormain():
         HEleForLookup[:,checkwhereVert1,checkwhereEle1] = totWatDepth[0,checkwhereVert1,checkwhereEle1]
         cadvForLookup[:,checkwhereVert1,checkwhereEle1] = cadv[-1,checkwhereVert1,checkwhereEle1]
         # now find where there are dry to partially wet to fully wet subelement
-        checkwhere1 = np.any(wetFraction== 1.0,axis=0).nonzero()
+        checkwhere1 = np.any(wetFraction == 1.0,axis=0).nonzero()
         chechwhereVert1 = checkwhere1[0]
         checkwhereEle1 = checkwhere1[1]
         checkwhere0 = np.any(wetFraction == 0.0,axis=0).nonzero()
@@ -4819,7 +4821,9 @@ class subgridCalculatormain():
         # now find where this overlaps
         
         checkwherebothEle = np.intersect1d(checkwhereEle1,checkwhereEle0)
-
+        end = time.time()
+        print('Getting Arrays ready for Reduction took {} s'.format(end-start))
+        start = time.time()
         intersectNodes = []
 
         for element in checkwherebothEle:
@@ -4828,7 +4832,9 @@ class subgridCalculatormain():
             Nodes1st = chechwhereVert1[np.where(checkwhereEle1 == element)]
             intersectNodes.append(np.intersect1d(Nodes0th,Nodes1st))
             
-            
+        end = time.time()
+        print('Finding what nodes of each array are partially wet took {} s'.format(end-start))
+        start = time.time()
         for i in range(len(checkwherebothEle)):
             
             element = checkwherebothEle[i]
@@ -4884,7 +4890,7 @@ class subgridCalculatormain():
                                                       *(cadv[greaterThan,vert,element] - cadv[lessThan,vert,element])
                                                       + (cadv[lessThan,vert,element]))
                         
-            # print('Finished Element {}'.format(element))
+            # print('Finished Element {} of {}'.format(i+1,len(checkwherebothEle)))
          
         end = time.time()
         print('Reduction Finished and took {} s'.format(end-start))
@@ -4989,6 +4995,8 @@ class subgridCalculatormain():
         cadvVar[:,:,:] = cadvForLookup
         
         ncFile.close()
+        
+        return wetFraction, checkwhere0, checkwhere1, checkwherebothEle, intersectNodes,meshConnectivityInSubgrid,containedVertexList0Index
         
         #             # # now combine the two triangles and find the points inside
                     
