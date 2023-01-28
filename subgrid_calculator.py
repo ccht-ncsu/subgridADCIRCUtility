@@ -4751,6 +4751,8 @@ class subgridCalculatormain():
         start = time.time()
         
         meshConnectivityInSubgrid = meshConnectivity[containedElementList0Index]
+        # now just get the unique vertex numbers to reduce the size of this array
+        meshConnectivityInSubgrid = np.unique(meshConnectivityInSubgrid)
         
         for vertex in containedVertexList0Index:
             
@@ -4819,7 +4821,9 @@ class subgridCalculatormain():
         # now find where this overlaps
         
         checkwherebothEle = np.intersect1d(checkwhereEle1,checkwhereEle0)
-
+        end = time.time()
+        print('Finished prepping for Reduction took {} s'.format(end-start))
+        start = time.time()
         intersectNodes = []
 
         for element in checkwherebothEle:
@@ -4828,7 +4832,9 @@ class subgridCalculatormain():
             Nodes1st = chechwhereVert1[np.where(checkwhereEle1 == element)]
             intersectNodes.append(np.intersect1d(Nodes0th,Nodes1st))
             
-            
+        end = time.time()
+        print('Finished finding which subelements were partially wet took {} s'.format(end-start))
+        start = time.time()
         for i in range(len(checkwherebothEle)):
             
             element = checkwherebothEle[i]
@@ -4884,15 +4890,20 @@ class subgridCalculatormain():
                                                       *(cadv[greaterThan,vert,element] - cadv[lessThan,vert,element])
                                                       + (cadv[lessThan,vert,element]))
                         
-            # print('Finished Element {}'.format(element))
+            print('Finished Element {} of {}'.format(i,len(checkwherebothEle)))
          
         end = time.time()
-        print('Reduction Finished and took {} s'.format(end-start))
+        print('Reduction of partially wet elements finished and took {} s'.format(end-start))
 
         # fill the elements that are not contained in the subgrid region with -99999
         depthsEleForLookup[:,:,np.where(binaryElementList==0)[0]] = -99999
         HEleForLookup[:,:,np.where(binaryElementList==0)[0]] = -99999
         cadvForLookup[:,:,np.where(binaryElementList==0)[0]] = -99999
+        
+        # deallocate arrays
+        totWatDepth = None
+        cadv = None
+        wetFraction = None
         
         ncFile = nc.Dataset(outputFilename, mode = 'w', format = 'NETCDF4')
         
