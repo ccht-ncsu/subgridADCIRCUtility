@@ -4753,20 +4753,32 @@ class subgridCalculatormain():
         meshConnectivityInSubgrid = meshConnectivity[containedElementList0Index]
         # now just get the unique vertex numbers to reduce the size of this array
         meshConnectivityInSubgrid = np.unique(meshConnectivityInSubgrid)
+        # now get an array of vertices not contained in the subgrid
+        vertNotInSubgrid = np.delete(totalVertInfoTable[:,0].astype(int),
+                                     meshConnectivityInSubgrid)
+        # change the vertex to not be in the subgrid
+        binaryVertexList[vertNotInSubgrid] = 0
+        # change the vertex variables to be -99999
+        wetFractionVertex[vertNotInSubgrid,:] = -99999
+        wetTotWatDepthVertex[vertNotInSubgrid,:] = -99999
+        gridTotWatDepthVertex[vertNotInSubgrid,:] = -99999
+        cfVertex[vertNotInSubgrid,:] = -99999
+        cmfVertex[vertNotInSubgrid,:] = -99999
         
-        for vertex in containedVertexList0Index:
+        
+        # for vertex in containedVertexList0Index:
             
-            inSubgrid = np.any(meshConnectivityInSubgrid == vertex)
+        #     inSubgrid = np.any(meshConnectivityInSubgrid == vertex)
             
-            if(inSubgrid != True):
-                # change the vertex to not be in the subgrid
-                binaryVertexList[vertex] = 0
-                # change the vertex variables to be -99999
-                wetFractionVertex[vertex,:] = -99999
-                wetTotWatDepthVertex[vertex,:] = -99999
-                gridTotWatDepthVertex[vertex,:] = -99999
-                cfVertex[vertex,:] = -99999
-                cmfVertex[vertex,:] = -99999
+        #     if(inSubgrid != True):
+        #         # change the vertex to not be in the subgrid
+        #         binaryVertexList[vertex] = 0
+        #         # change the vertex variables to be -99999
+        #         wetFractionVertex[vertex,:] = -99999
+        #         wetTotWatDepthVertex[vertex,:] = -99999
+        #         gridTotWatDepthVertex[vertex,:] = -99999
+        #         cfVertex[vertex,:] = -99999
+        #         cmfVertex[vertex,:] = -99999
                 
                 
         desiredPhiList = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
@@ -4811,86 +4823,175 @@ class subgridCalculatormain():
         HEleForLookup[:,checkwhereVert1,checkwhereEle1] = totWatDepth[0,checkwhereVert1,checkwhereEle1]
         cadvForLookup[:,checkwhereVert1,checkwhereEle1] = cadv[-1,checkwhereVert1,checkwhereEle1]
         # now find where there are dry to partially wet to fully wet subelement
-        checkwhere1 = np.any(wetFraction== 1.0,axis=0).nonzero()
-        chechwhereVert1 = checkwhere1[0]
-        checkwhereEle1 = checkwhere1[1]
+        # checkwhere1 = np.any(wetFraction== 1.0,axis=0).nonzero()
+        # checkwhereVert1 = checkwhere1[0]
+        # checkwhereEle1 = checkwhere1[1]
         checkwhere0 = np.any(wetFraction == 0.0,axis=0).nonzero()
-        chechwhereVert0 = checkwhere0[0]
+        checkwhereVert0 = checkwhere0[0]
         checkwhereEle0 = checkwhere0[1]
         
         # now find where this overlaps
-        
-        checkwherebothEle = np.intersect1d(checkwhereEle1,checkwhereEle0)
+        # return checkwhere0,checkwhere1
+        # checkwherebothEle = np.intersect1d(checkwhereEle1,checkwhereEle0)
         end = time.time()
         print('Finished prepping for Reduction took {} s'.format(end-start))
         start = time.time()
-        intersectNodes = []
-
-        for element in checkwherebothEle:
+        
+        for i in range(len(checkwhereEle0)):
             
-            Nodes0th = chechwhereVert0[np.where(checkwhereEle0 == element)]
-            Nodes1st = chechwhereVert1[np.where(checkwhereEle1 == element)]
-            intersectNodes.append(np.intersect1d(Nodes0th,Nodes1st))
+            element = checkwhereEle0[i]
+            vert = checkwhereVert0[i]
+            currPhiArray = wetFraction[:,vert,element]
             
-        end = time.time()
-        print('Finished finding which subelements were partially wet took {} s'.format(end-start))
-        start = time.time()
-        for i in range(len(checkwherebothEle)):
+            # make sure that the phi array also gets fully wet and then proceed
+            # otherwise just skip
             
-            element = checkwherebothEle[i]
-            verts = intersectNodes[i]
-            
-            for vert in verts:
-
-                currPhiArray = wetFraction[:,vert,element]
+            if(1.0 in currPhiArray):
                 
-                for k in range(len(desiredPhiList)):
+                # do when phi == 0
+                # for phi == 0.0 you want exactly where that is in the currPhiArray
+                equalTo = np.where(currPhiArray == 0.0)[0][-1]
+                depthsEleForLookup[0,vert,element] = surfaceElevations[equalTo]
+                HEleForLookup[0,vert,element] = totWatDepth[equalTo,vert,element]
+                cadvForLookup[0,vert,element] = cadv[equalTo,vert,element]
+                
+                # do when phi == 1
+                # for phi == 1.0 you want exactly where that is in the currPhiArray
+                equalTo = np.where(currPhiArray == 1.0)[0][0]
+                depthsEleForLookup[-1,vert,element] = surfaceElevations[equalTo]
+                HEleForLookup[-1,vert,element] = totWatDepth[equalTo,vert,element]
+                cadvForLookup[-1,vert,element] = cadv[equalTo,vert,element]
+                
+                # only iterate between the second and next to last phi
+                for k in range(1,len(desiredPhiList)-1):
                 
                     desiredPhi = desiredPhiList[k]
+                    greaterThan = np.where(currPhiArray > desiredPhi)[0][0]
+                    lessThan = np.where(currPhiArray < desiredPhi)[0][-1]
                     
-                    # for phi == 0.0 you want exactly where that is in the currPhiArray
+                    depthsEleForLookup[k,vert,element] = (((desiredPhi - currPhiArray[lessThan])
+                                                  /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
+                                                  *(surfaceElevations[greaterThan] - surfaceElevations[lessThan])
+                                                  + (surfaceElevations[lessThan]))
                     
-                    if(desiredPhi == 0.0):
+                    HEleForLookup[k,vert,element] = (((desiredPhi - currPhiArray[lessThan])
+                                                  /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
+                                                  *(totWatDepth[greaterThan,vert,element] - totWatDepth[lessThan,vert,element])
+                                                  + (totWatDepth[lessThan,vert,element]))
+                    
+                    cadvForLookup[k,vert,element] = (((desiredPhi - currPhiArray[lessThan])
+                                                  /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
+                                                  *(cadv[greaterThan,vert,element] - cadv[lessThan,vert,element])
+                                                  + (cadv[lessThan,vert,element]))
+                    
+                    # # for phi == 0.0 you want exactly where that is in the currPhiArray
+                    
+                    # if(desiredPhi == 0.0):
                         
-                        equalTo = np.where(currPhiArray == desiredPhi)[0][-1]
-                        depthsEleForLookup[k,vert,element] = surfaceElevations[equalTo]
-                        HEleForLookup[k,vert,element] = totWatDepth[equalTo,vert,element]
-                        cadvForLookup[k,vert,element] = cadv[equalTo,vert,element]
+                    #     equalTo = np.where(currPhiArray == desiredPhi)[0][-1]
+                    #     depthsEleForLookup[k,vert,element] = surfaceElevations[equalTo]
+                    #     HEleForLookup[k,vert,element] = totWatDepth[equalTo,vert,element]
+                    #     cadvForLookup[k,vert,element] = cadv[equalTo,vert,element]
                         
                         
-                    # for phi == 1.0 you want exactly where that is in the currPhiArray
+                    # # for phi == 1.0 you want exactly where that is in the currPhiArray
                         
-                    elif(desiredPhi == 1.0):
+                    # elif(desiredPhi == 1.0):
                         
-                        equalTo = np.where(currPhiArray == desiredPhi)[0][0]
-                        depthsEleForLookup[k,vert,element] = surfaceElevations[equalTo]
-                        HEleForLookup[k,vert,element] = totWatDepth[equalTo,vert,element]
-                        cadvForLookup[k,vert,element] = cadv[equalTo,vert,element]
+                    #     equalTo = np.where(currPhiArray == desiredPhi)[0][0]
+                    #     depthsEleForLookup[k,vert,element] = surfaceElevations[equalTo]
+                    #     HEleForLookup[k,vert,element] = totWatDepth[equalTo,vert,element]
+                    #     cadvForLookup[k,vert,element] = cadv[equalTo,vert,element]
                         
                         
-                    # now look for the points in between 0 and 1
+                    # # now look for the points in between 0 and 1
                         
-                    else:
+                    # else:
                         
-                        greaterThan = np.where(currPhiArray > desiredPhi)[0][0]
-                        lessThan = np.where(currPhiArray < desiredPhi)[0][-1]
+                    #     greaterThan = np.where(currPhiArray > desiredPhi)[0][0]
+                    #     lessThan = np.where(currPhiArray < desiredPhi)[0][-1]
                         
-                        depthsEleForLookup[k,vert,element] = (((desiredPhi - currPhiArray[lessThan])
-                                                      /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
-                                                      *(surfaceElevations[greaterThan] - surfaceElevations[lessThan])
-                                                      + (surfaceElevations[lessThan]))
+                    #     depthsEleForLookup[k,vert,element] = (((desiredPhi - currPhiArray[lessThan])
+                    #                                   /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
+                    #                                   *(surfaceElevations[greaterThan] - surfaceElevations[lessThan])
+                    #                                   + (surfaceElevations[lessThan]))
                         
-                        HEleForLookup[k,vert,element] = (((desiredPhi - currPhiArray[lessThan])
-                                                      /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
-                                                      *(totWatDepth[greaterThan,vert,element] - totWatDepth[lessThan,vert,element])
-                                                      + (totWatDepth[lessThan,vert,element]))
+                    #     HEleForLookup[k,vert,element] = (((desiredPhi - currPhiArray[lessThan])
+                    #                                   /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
+                    #                                   *(totWatDepth[greaterThan,vert,element] - totWatDepth[lessThan,vert,element])
+                    #                                   + (totWatDepth[lessThan,vert,element]))
                         
-                        cadvForLookup[k,vert,element] = (((desiredPhi - currPhiArray[lessThan])
-                                                      /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
-                                                      *(cadv[greaterThan,vert,element] - cadv[lessThan,vert,element])
-                                                      + (cadv[lessThan,vert,element]))
+                    #     cadvForLookup[k,vert,element] = (((desiredPhi - currPhiArray[lessThan])
+                    #                                   /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
+                    #                                   *(cadv[greaterThan,vert,element] - cadv[lessThan,vert,element])
+                    #                                   + (cadv[lessThan,vert,element]))
+        # intersectNodes = []
+
+        # for element in checkwherebothEle:
+            
+        #     Nodes0th = chechwhereVert0[np.where(checkwhereEle0 == element)]
+        #     Nodes1st = chechwhereVert1[np.where(checkwhereEle1 == element)]
+        #     intersectNodes.append(np.intersect1d(Nodes0th,Nodes1st))
+            
+        # end = time.time()
+        # print('Finished finding which subelements were partially wet took {} s'.format(end-start))
+        # start = time.time()
+        # for i in range(len(checkwherebothEle)):
+            
+        #     element = checkwherebothEle[i]
+        #     verts = intersectNodes[i]
+            
+        #     for vert in verts:
+
+        #         currPhiArray = wetFraction[:,vert,element]
+                
+        #         for k in range(len(desiredPhiList)):
+                
+        #             desiredPhi = desiredPhiList[k]
+                    
+        #             # for phi == 0.0 you want exactly where that is in the currPhiArray
+                    
+        #             if(desiredPhi == 0.0):
                         
-            print('Finished Element {} of {}'.format(i,len(checkwherebothEle)))
+        #                 equalTo = np.where(currPhiArray == desiredPhi)[0][-1]
+        #                 depthsEleForLookup[k,vert,element] = surfaceElevations[equalTo]
+        #                 HEleForLookup[k,vert,element] = totWatDepth[equalTo,vert,element]
+        #                 cadvForLookup[k,vert,element] = cadv[equalTo,vert,element]
+                        
+                        
+        #             # for phi == 1.0 you want exactly where that is in the currPhiArray
+                        
+        #             elif(desiredPhi == 1.0):
+                        
+        #                 equalTo = np.where(currPhiArray == desiredPhi)[0][0]
+        #                 depthsEleForLookup[k,vert,element] = surfaceElevations[equalTo]
+        #                 HEleForLookup[k,vert,element] = totWatDepth[equalTo,vert,element]
+        #                 cadvForLookup[k,vert,element] = cadv[equalTo,vert,element]
+                        
+                        
+        #             # now look for the points in between 0 and 1
+                        
+        #             else:
+                        
+        #                 greaterThan = np.where(currPhiArray > desiredPhi)[0][0]
+        #                 lessThan = np.where(currPhiArray < desiredPhi)[0][-1]
+                        
+        #                 depthsEleForLookup[k,vert,element] = (((desiredPhi - currPhiArray[lessThan])
+        #                                               /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
+        #                                               *(surfaceElevations[greaterThan] - surfaceElevations[lessThan])
+        #                                               + (surfaceElevations[lessThan]))
+                        
+        #                 HEleForLookup[k,vert,element] = (((desiredPhi - currPhiArray[lessThan])
+        #                                               /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
+        #                                               *(totWatDepth[greaterThan,vert,element] - totWatDepth[lessThan,vert,element])
+        #                                               + (totWatDepth[lessThan,vert,element]))
+                        
+        #                 cadvForLookup[k,vert,element] = (((desiredPhi - currPhiArray[lessThan])
+        #                                               /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
+        #                                               *(cadv[greaterThan,vert,element] - cadv[lessThan,vert,element])
+        #                                               + (cadv[lessThan,vert,element]))
+                        
+        #     print('Finished Element {} of {}'.format(i,len(checkwherebothEle)))
          
         end = time.time()
         print('Reduction of partially wet elements finished and took {} s'.format(end-start))
