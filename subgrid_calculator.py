@@ -4312,9 +4312,9 @@ class subgridCalculatormain():
         
         # now create a surface elevation array
         
-        ds = 0.2 # will want to experiment with this and speed
+        ds = 0.5 # will want to experiment with this and speed
         # surface elevation array for caoluations
-        surfaceElevations = np.round(np.arange(-5,5+ds,ds),2).astype('float32') 
+        surfaceElevations = np.round(np.arange(-20,20+ds,ds),2).astype('float32') 
         
         # preallocate necessary arrays
         numEle = mesh[3]
@@ -4884,6 +4884,8 @@ class subgridCalculatormain():
                                                   *(cadv[greaterThan,vert,element] - cadv[lessThan,vert,element])
                                                   + (cadv[lessThan,vert,element]))
                     
+            
+            # print('Finished Element {} of {}'.format(i,len(checkwhereEle0)))
                     # # for phi == 0.0 you want exactly where that is in the currPhiArray
                     
                     # if(desiredPhi == 0.0):
