@@ -5815,16 +5815,16 @@ class subgridCalculatormain():
                 depthsVertForLookup[0,vert] = surfaceElevations[equalTo0[-1]]
                 HGVertForLookup[0,vert] = gridTotWatDepthVertex[vert,equalTo0[-1]]
                 HWVertForLookup[0,vert] = wetTotWatDepthVertex[vert,equalTo0[-1]]
-                cfVertForLookup[0,vert] = cf[vert,equalTo0[-1]]
-                cmfVertForLookup[0,vert] = cmf[vert,equalTo0[-1]]
+                cfVertForLookup[0,vert] = cfVertex[vert,equalTo0[-1]]
+                cmfVertForLookup[0,vert] = cmfVertex[vert,equalTo0[-1]]
                 
             else: # so if it never gets fully dry set everything to the value corresponding to the first surface elevations
             
                 depthsVertForLookup[0,vert] = surfaceElevations[0]
                 HGVertForLookup[0,vert] = gridTotWatDepthVertex[vert,0]
                 HWVertForLookup[0,vert] = wetTotWatDepthVertex[vert,0]
-                cfVertForLookup[0,vert] = cf[vert,0]
-                cmfVertForLookup[0,vert] = cmf[vert,0]
+                cfVertForLookup[0,vert] = cfVertex[vert,0]
+                cmfVertForLookup[0,vert] = cmfVertex[vert,0]
                 
             # now check for when phi == 1.0 and find exactly where that is
             
@@ -5835,16 +5835,16 @@ class subgridCalculatormain():
                 depthsVertForLookup[-1,vert] = surfaceElevations[equalTo1[0]]
                 HGVertForLookup[-1,vert] = gridTotWatDepthVertex[vert,equalTo1[0]]
                 HWVertForLookup[-1,vert] = wetTotWatDepthVertex[vert,equalTo1[0]]
-                cfVertForLookup[-1,vert] = cf[vert,equalTo1[0]]
-                cmfVertForLookup[-1,vert] = cmf[vert,equalTo1[0]]
+                cfVertForLookup[-1,vert] = cfVertex[vert,equalTo1[0]]
+                cmfVertForLookup[-1,vert] = cmfVertex[vert,equalTo1[0]]
                 
             else: # if there is nothing that is equal to 1 (so never gets fully wet, just set everything to correspind to the last surface elevation)
             
                 depthsVertForLookup[-1,vert] = surfaceElevations[-1]
                 HGVertForLookup[-1,vert] = gridTotWatDepthVertex[vert,-1]
                 HWVertForLookup[-1,vert] = wetTotWatDepthVertex[vert,-1]
-                cfVertForLookup[-1,vert] = cf[vert,-1]
-                cmfVertForLookup[-1,vert] = cmf[vert,-1]
+                cfVertForLookup[-1,vert] = cfVertex[vert,-1]
+                cmfVertForLookup[-1,vert] = cmfVertex[vert,-1]
                 
                 
             # now for everything else
@@ -5861,8 +5861,8 @@ class subgridCalculatormain():
                     depthsVertForLookup[k,vert] = surfaceElevations[-1]
                     HGVertForLookup[k,vert] = gridTotWatDepthVertex[vert,-1]
                     HWVertForLookup[k,vert] = wetTotWatDepthVertex[vert,-1]
-                    cfVertForLookup[k,vert] = cf[vert,-1]
-                    cmfVertForLookup[k,vert] = cmf[vert,-1]
+                    cfVertForLookup[k,vert] = cfVertex[vert,-1]
+                    cmfVertForLookup[k,vert] = cmfVertex[vert,-1]
                     
                 elif(greaterThan[0] == 0): # so if the first currphi index is greater than the desired phi 
                 
@@ -5871,8 +5871,8 @@ class subgridCalculatormain():
                     depthsVertForLookup[k,vert] = surfaceElevations[0]
                     HGVertForLookup[k,vert] = gridTotWatDepthVertex[vert,0]
                     HWVertForLookup[k,vert] = wetTotWatDepthVertex[vert,0]
-                    cfVertForLookup[k,vert] = cf[vert,0]
-                    cmfVertForLookup[k,vert] = cmf[vert,0]
+                    cfVertForLookup[k,vert] = cfVertex[vert,0]
+                    cmfVertForLookup[k,vert] = cmfVertex[vert,0]
         
                     
                 else: # this is where we interpolate 
@@ -5891,22 +5891,24 @@ class subgridCalculatormain():
                                                   *(gridTotWatDepthVertex[vert,greaterThan]
                                                     - gridTotWatDepthVertex[vert,lessThan])
                                                   + (gridTotWatDepthVertex[vert,lessThan]))
-                    
+        
                     HWVertForLookup[k,vert] = (((desiredPhi - currPhiArray[lessThan])
                                                   /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
                                                   *(wetTotWatDepthVertex[vert,greaterThan]
                                                     - wetTotWatDepthVertex[vert,lessThan])
                                                   + (wetTotWatDepthVertex[vert,lessThan]))
+                    
                     cfVertForLookup[k,vert] = (((desiredPhi - currPhiArray[lessThan])
                                                   /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
-                                                  *(cf[vert,greaterThan]
-                                                    - cf[vert,lessThan])
-                                                  + (cf[vert,lessThan]))
+                                                  *(cfVertex[vert,greaterThan]
+                                                    - cfVertex[vert,lessThan])
+                                                  + (cfVertex[vert,lessThan]))
+                    
                     cmfVertForLookup[k,vert] = (((desiredPhi - currPhiArray[lessThan])
                                                   /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
-                                                  *(cmf[vert,greaterThan]
-                                                    - cmf[vert,lessThan])
-                                                  + (cmf[vert,lessThan]))
+                                                  *(cmfVertex[vert,greaterThan]
+                                                    - cmfVertex[vert,lessThan])
+                                                  + (cmfVertex[vert,lessThan]))
             
                 
 
