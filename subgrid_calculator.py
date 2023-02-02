@@ -5211,9 +5211,9 @@ class subgridCalculatormain():
         
         # now create a surface elevation array
         
-        ds = 0.2 # will want to experiment with this and speed
+        ds = 0.25 # will want to experiment with this and speed
         # surface elevation array for caoluations
-        surfaceElevations = np.round(np.arange(-5,5+ds,ds),2).astype('float32') 
+        surfaceElevations = np.round(np.arange(-10,10+ds,ds),2).astype('float32') 
         
         # preallocate necessary arrays
         numEle = mesh[3]
@@ -5793,11 +5793,11 @@ class subgridCalculatormain():
         wetFraction = None
                     
 #### NOW WE NEED TO REPEAT THIS FOR THE VERTICES ######## 
-        depthsVertForLookup = np.zeros((11,len(wetFractionVertex[:])))
-        HGVertForLookup = np.zeros((11,len(wetFractionVertex[:])))
-        HWVertForLookup = np.zeros((11,len(wetFractionVertex[:])))
-        cfVertForLookup = np.zeros((11,len(wetFractionVertex[:])))
-        cmfVertForLookup = np.zeros((11,len(wetFractionVertex[:])))
+        depthsVertForLookup = np.zeros((len(wetFractionVertex[:]),11))
+        HGVertForLookup = np.zeros((len(wetFractionVertex[:]),11))
+        HWVertForLookup = np.zeros((len(wetFractionVertex[:]),11))
+        cfVertForLookup = np.zeros((len(wetFractionVertex[:]),11))
+        cmfVertForLookup = np.zeros((len(wetFractionVertex[:]),11))
             
         for i in range(numNode):
             
@@ -5812,19 +5812,19 @@ class subgridCalculatormain():
             
             if(len(equalTo0)!=0): # if 0.0 exists in the array
             
-                depthsVertForLookup[0,vert] = surfaceElevations[equalTo0[-1]]
-                HGVertForLookup[0,vert] = gridTotWatDepthVertex[vert,equalTo0[-1]]
-                HWVertForLookup[0,vert] = wetTotWatDepthVertex[vert,equalTo0[-1]]
-                cfVertForLookup[0,vert] = cfVertex[vert,equalTo0[-1]]
-                cmfVertForLookup[0,vert] = cmfVertex[vert,equalTo0[-1]]
+                depthsVertForLookup[vert,0] = surfaceElevations[equalTo0[-1]]
+                HGVertForLookup[vert,0] = gridTotWatDepthVertex[vert,equalTo0[-1]]
+                HWVertForLookup[vert,0] = wetTotWatDepthVertex[vert,equalTo0[-1]]
+                cfVertForLookup[vert,0] = cfVertex[vert,equalTo0[-1]]
+                cmfVertForLookup[vert,0] = cmfVertex[vert,equalTo0[-1]]
                 
             else: # so if it never gets fully dry set everything to the value corresponding to the first surface elevations
             
-                depthsVertForLookup[0,vert] = surfaceElevations[0]
-                HGVertForLookup[0,vert] = gridTotWatDepthVertex[vert,0]
-                HWVertForLookup[0,vert] = wetTotWatDepthVertex[vert,0]
-                cfVertForLookup[0,vert] = cfVertex[vert,0]
-                cmfVertForLookup[0,vert] = cmfVertex[vert,0]
+                depthsVertForLookup[vert,0] = surfaceElevations[0]
+                HGVertForLookup[vert,0] = gridTotWatDepthVertex[vert,0]
+                HWVertForLookup[vert,0] = wetTotWatDepthVertex[vert,0]
+                cfVertForLookup[vert,0] = cfVertex[vert,0]
+                cmfVertForLookup[vert,0] = cmfVertex[vert,0]
                 
             # now check for when phi == 1.0 and find exactly where that is
             
@@ -5832,19 +5832,19 @@ class subgridCalculatormain():
             
             if(len(equalTo1)!=0): # if 1.0 exists in the array
             
-                depthsVertForLookup[-1,vert] = surfaceElevations[equalTo1[0]]
-                HGVertForLookup[-1,vert] = gridTotWatDepthVertex[vert,equalTo1[0]]
-                HWVertForLookup[-1,vert] = wetTotWatDepthVertex[vert,equalTo1[0]]
-                cfVertForLookup[-1,vert] = cfVertex[vert,equalTo1[0]]
-                cmfVertForLookup[-1,vert] = cmfVertex[vert,equalTo1[0]]
+                depthsVertForLookup[vert,-1] = surfaceElevations[equalTo1[0]]
+                HGVertForLookup[vert,-1] = gridTotWatDepthVertex[vert,equalTo1[0]]
+                HWVertForLookup[vert,-1] = wetTotWatDepthVertex[vert,equalTo1[0]]
+                cfVertForLookup[vert,-1] = cfVertex[vert,equalTo1[0]]
+                cmfVertForLookup[vert,-1] = cmfVertex[vert,equalTo1[0]]
                 
             else: # if there is nothing that is equal to 1 (so never gets fully wet, just set everything to correspind to the last surface elevation)
             
-                depthsVertForLookup[-1,vert] = surfaceElevations[-1]
-                HGVertForLookup[-1,vert] = gridTotWatDepthVertex[vert,-1]
-                HWVertForLookup[-1,vert] = wetTotWatDepthVertex[vert,-1]
-                cfVertForLookup[-1,vert] = cfVertex[vert,-1]
-                cmfVertForLookup[-1,vert] = cmfVertex[vert,-1]
+                depthsVertForLookup[vert,-1] = surfaceElevations[-1]
+                HGVertForLookup[vert,-1] = gridTotWatDepthVertex[vert,-1]
+                HWVertForLookup[vert,-1] = wetTotWatDepthVertex[vert,-1]
+                cfVertForLookup[vert,-1] = cfVertex[vert,-1]
+                cmfVertForLookup[vert,-1] = cmfVertex[vert,-1]
                 
                 
             # now for everything else
@@ -5858,21 +5858,21 @@ class subgridCalculatormain():
                 
                 # set everything to correspond to the last surface elevation
                     
-                    depthsVertForLookup[k,vert] = surfaceElevations[-1]
-                    HGVertForLookup[k,vert] = gridTotWatDepthVertex[vert,-1]
-                    HWVertForLookup[k,vert] = wetTotWatDepthVertex[vert,-1]
-                    cfVertForLookup[k,vert] = cfVertex[vert,-1]
-                    cmfVertForLookup[k,vert] = cmfVertex[vert,-1]
+                    depthsVertForLookup[vert,k] = surfaceElevations[-1]
+                    HGVertForLookup[vert,k] = gridTotWatDepthVertex[vert,-1]
+                    HWVertForLookup[vert,k] = wetTotWatDepthVertex[vert,-1]
+                    cfVertForLookup[vert,k] = cfVertex[vert,-1]
+                    cmfVertForLookup[vert,k] = cmfVertex[vert,-1]
                     
                 elif(greaterThan[0] == 0): # so if the first currphi index is greater than the desired phi 
                 
                 # set everything to correspond to the first surfaceelevation
                 
-                    depthsVertForLookup[k,vert] = surfaceElevations[0]
-                    HGVertForLookup[k,vert] = gridTotWatDepthVertex[vert,0]
-                    HWVertForLookup[k,vert] = wetTotWatDepthVertex[vert,0]
-                    cfVertForLookup[k,vert] = cfVertex[vert,0]
-                    cmfVertForLookup[k,vert] = cmfVertex[vert,0]
+                    depthsVertForLookup[vert,k] = surfaceElevations[0]
+                    HGVertForLookup[vert,k] = gridTotWatDepthVertex[vert,0]
+                    HWVertForLookup[vert,k] = wetTotWatDepthVertex[vert,0]
+                    cfVertForLookup[vert,k] = cfVertex[vert,0]
+                    cmfVertForLookup[vert,k] = cmfVertex[vert,0]
         
                     
                 else: # this is where we interpolate 
@@ -5881,30 +5881,30 @@ class subgridCalculatormain():
                     lessThan = greaterThan - 1
             
                     
-                    depthsVertForLookup[k,vert] = (((desiredPhi - currPhiArray[lessThan])
+                    depthsVertForLookup[vert,k] = (((desiredPhi - currPhiArray[lessThan])
                                                   /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
                                                   *(surfaceElevations[greaterThan] - surfaceElevations[lessThan])
                                                   + (surfaceElevations[lessThan]))
                     
-                    HGVertForLookup[k,vert] = (((desiredPhi - currPhiArray[lessThan])
+                    HGVertForLookup[vert,k] = (((desiredPhi - currPhiArray[lessThan])
                                                   /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
                                                   *(gridTotWatDepthVertex[vert,greaterThan]
                                                     - gridTotWatDepthVertex[vert,lessThan])
                                                   + (gridTotWatDepthVertex[vert,lessThan]))
         
-                    HWVertForLookup[k,vert] = (((desiredPhi - currPhiArray[lessThan])
+                    HWVertForLookup[vert,k] = (((desiredPhi - currPhiArray[lessThan])
                                                   /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
                                                   *(wetTotWatDepthVertex[vert,greaterThan]
                                                     - wetTotWatDepthVertex[vert,lessThan])
                                                   + (wetTotWatDepthVertex[vert,lessThan]))
                     
-                    cfVertForLookup[k,vert] = (((desiredPhi - currPhiArray[lessThan])
+                    cfVertForLookup[vert,k] = (((desiredPhi - currPhiArray[lessThan])
                                                   /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
                                                   *(cfVertex[vert,greaterThan]
                                                     - cfVertex[vert,lessThan])
                                                   + (cfVertex[vert,lessThan]))
                     
-                    cmfVertForLookup[k,vert] = (((desiredPhi - currPhiArray[lessThan])
+                    cmfVertForLookup[vert,k] = (((desiredPhi - currPhiArray[lessThan])
                                                   /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
                                                   *(cmfVertex[vert,greaterThan]
                                                     - cmfVertex[vert,lessThan])
@@ -5914,11 +5914,11 @@ class subgridCalculatormain():
 
         # fill the vertices not contained in the subgrid region with -99999
         
-        depthsVertForLookup[:,vertNotInSubgrid] = -99999
-        HGVertForLookup[k,vertNotInSubgrid] = -99999
-        HWVertForLookup[k,vertNotInSubgrid] = -99999
-        cfVertForLookup[k,vertNotInSubgrid] = -99999
-        cmfVertForLookup[k,vertNotInSubgrid] = -99999
+        depthsVertForLookup[vertNotInSubgrid,:] = -99999
+        HGVertForLookup[vertNotInSubgrid,:] = -99999
+        HWVertForLookup[vertNotInSubgrid,:] = -99999
+        cfVertForLookup[vertNotInSubgrid,:] = -99999
+        cmfVertForLookup[vertNotInSubgrid,:] = -99999
         
         # deallocate arrays 
         wetFractionVertex = None
@@ -5952,7 +5952,7 @@ class subgridCalculatormain():
         
         # create array for depth in reduced vertex table
         wetFractionDepthVarVertex = ncFile.createVariable('wetFractionDepthVertex',np.float32,
-                                            ('numPhi','numNode'))
+                                            ('numNode','numPhi'))
         # create array for depth in reduced element table
         wetFractionVarDepths = ncFile.createVariable('wetFractionDepths',np.float32,
                                                 ('numPhi','numVert','numEle'))
@@ -5968,15 +5968,15 @@ class subgridCalculatormain():
         
         # vertex wet total water depth
         wetTotWatDepthVarVertex = ncFile.createVariable('wetTotWatDepthVertex',np.float32,
-                                                          ('numPhi','numNode'))
+                                                          ('numNode','numPhi'))
         
         # vertex grid total water depth
         gridTotWatDepthVarVertex = ncFile.createVariable('gridTotWatDepthVertex',np.float32,
-                                                          ('numPhi','numNode'))
+                                                          ('numNode','numPhi'))
         
         # vertex coefficient of friction level 0
         cfVarVertex = ncFile.createVariable('cfVertex',np.float32,
-                                            ('numPhi','numNode'))
+                                            ('numNode','numPhi'))
         
         # variables showing which elements and vertices are contained within
         # the subgrid area
@@ -5995,7 +5995,7 @@ class subgridCalculatormain():
                                                       ('numNode'))
         # vertex coefficient of friction level 1
         cmfVarVertex = ncFile.createVariable('cmfVertex',np.float32,
-                                              ('numPhi','numNode'))
+                                              ('numNode','numPhi'))
         
         # elemental advection correction
         cadvVar = ncFile.createVariable('cadv',np.float32,
