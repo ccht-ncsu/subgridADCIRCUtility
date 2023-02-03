@@ -5951,7 +5951,7 @@ class subgridCalculatormain():
                                         'numPhi')
         
         # create array for depth in reduced vertex table
-        wetFractionDepthVarVertex = ncFile.createVariable('wetFractionDepthVertex',np.float32,
+        wetFractionDepthVarVertex = ncFile.createVariable('wetFractionVertex',np.float32,
                                             ('numNode','numPhi'))
         # create array for depth in reduced element table
         wetFractionVarDepths = ncFile.createVariable('wetFractionDepths',np.float32,
