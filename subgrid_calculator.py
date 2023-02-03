@@ -5022,6 +5022,16 @@ class subgridCalculatormain():
                 line = ctrF.readline().rstrip()
                 line = re.split(' *= *',line)
                 manningsnTableFilename = line[1] # get the mannings n table filename
+            # now read in the elevation array
+            line = ctrF.readline().rstrip()
+            line = re.split(' *= *',line)
+            minSurElev = float(line[1])
+            line = ctrF.readline().rstrip()
+            line = re.split(' *= *',line)
+            maxSurElev = float(line[1])
+            line = ctrF.readline().rstrip()
+            line = re.split(' *= *',line)
+            elevDisc = float(line[1])
             line = ctrF.readline().rstrip()
             line = re.split(' *= *',line)
             numDEMs = int(line[1])
@@ -5211,9 +5221,13 @@ class subgridCalculatormain():
         
         # now create a surface elevation array
         
-        ds = 0.25 # will want to experiment with this and speed
+        # ds = 0.25 # will want to experiment with this and speed
+        # # surface elevation array for caoluations
+        # surfaceElevations = np.round(np.arange(-10,10+ds,ds),2).astype('float32') 
+    
         # surface elevation array for caoluations
-        surfaceElevations = np.round(np.arange(-10,10+ds,ds),2).astype('float32') 
+        surfaceElevations = np.round(np.arange(minSurElev,maxSurElev+elevDisc,
+                                               elevDisc),2).astype('float32') 
         
         # preallocate necessary arrays
         numEle = mesh[3]
@@ -5782,7 +5796,7 @@ class subgridCalculatormain():
                                                       *(cadv[greaterThan,vert,element] - cadv[lessThan,vert,element])
                                                       + (cadv[lessThan,vert,element]))
                     
-                    
+                  
         # fill the elements that are not contained in the subgrid region with -99999
         depthsEleForLookup[:,:,np.where(binaryElementList==0)[0]] = -99999
         HEleForLookup[:,:,np.where(binaryElementList==0)[0]] = -99999
@@ -5791,8 +5805,11 @@ class subgridCalculatormain():
         totWatDepth = None
         cadv = None
         wetFraction = None
+        end = time.time()
+        print('Reduction of partially wet elements took {} s'.format(end-start))
                     
-#### NOW WE NEED TO REPEAT THIS FOR THE VERTICES ######## 
+#### NOW WE NEED TO REPEAT THIS FOR THE VERTICES ########
+        start = time.time() 
         depthsVertForLookup = np.zeros((len(wetFractionVertex[:]),11))
         HGVertForLookup = np.zeros((len(wetFractionVertex[:]),11))
         HWVertForLookup = np.zeros((len(wetFractionVertex[:]),11))
@@ -5928,7 +5945,7 @@ class subgridCalculatormain():
         cmf = None
         
         end = time.time()
-        print('Reduction of partially wet elements finished and took {} s'.format(end-start))
+        print('Reduction of partially wet vertices finished and took {} s'.format(end-start))
         
         #### CREATE THE NETCDF FILE
         ncFile = nc.Dataset(outputFilename, mode = 'w', format = 'NETCDF4')
