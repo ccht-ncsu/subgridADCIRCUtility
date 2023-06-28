@@ -16,10 +16,9 @@ The following link will take you to a data repository (need to figure out where 
   - The landcover file(s) used in the calulation.
 
 2. The python script reads the control file, calls the subgrid calulator and then simplifies the lookup table.
-  - When calling the subgrid calculator there are 2 versions to choose from. One is a CPU only version, and the other uses both CPU and NVIDIA GPUs. The CPU/GPU code         will run faster, especially for high-resolution subgrid files and large meshes.
-  - The GPU version of the code is called from the function calculateSubgridCorrectionv3GPU, and the CPU version is called using calculateSubgridCorrectionv3.
+  - To call the subgrid calculator you will need to use the calculateSubgridCorrection command. The code should begin running and print what element and DEM it is looping through to keep you updated on the process.
+  - At the end it will create a NetCDF file in the directory given by the control file. 
 
-  
 3. Other files contained within the data repo include:
 
   - 10 m resolution DEM and Landcover .tif files of Galevston Bay.
@@ -36,8 +35,7 @@ The following link will take you to a data repository (need to figure out where 
 4. gdal
 5. time
 6. netCDF4
-7. cupy (for GPU)
-8. cmocean (if you want to visualize stuff)
+7. cmocean (if you want to visualize stuff)
 
 # Gallery
 
