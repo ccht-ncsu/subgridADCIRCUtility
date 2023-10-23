@@ -10,6 +10,8 @@ The following link will take you to a data repository (need to figure out where 
   - The ADCIRC mesh file.
   - A flag saying whether or not you are using default mannings n values.
   - If not using default mannings n values you need to add a line with the filename of the non-defualt table.
+  - The minimum and maximum water surface elevations over which to calculate the subgrid.
+  - The discretization step of the water surface elevations.
   - The number of DEMs used in the calulation.
   - The DEM file(s) used in the subgrid calulation.
   - The number of landcover files used in the calulation.
