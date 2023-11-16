@@ -40,7 +40,7 @@ class SubgridDepthBased:
 class SubgridCalculatorDGP0():
     """Class to evaluate and hold subgrid data"""
 
-    def __init__(self, subgridControlFilename, level0andLevel1 = True, GPU = True):
+    def __init__(self, subgridControlFilename = None, level0andLevel1 = True, GPU = False):
         import numpy
 
         self.level0andLevel1 = level0andLevel1  # state if you want level0 and level1 corrections or just level 0
@@ -58,9 +58,13 @@ class SubgridCalculatorDGP0():
         self.maxWatDepthAboveHighestGround = 3.0
         self.watDepthAboveHighestGroundIncrement = 1.0
 
-        self.readSubgridControlFile(subgridControlFilename)
-        self.readMeshFile(self.control.meshFilename)
-        self.createEdgeList()
+        self.default_manningsn = 0.03
+        self.cf_lower_lim = 0.0025
+
+        self.need_projection = True
+
+        if subgridControlFilename != None:
+            self.readSubgridControlFile(subgridControlFilename)
 
     ######################## Function to read subgrid control file ###################
     
@@ -108,14 +112,30 @@ class SubgridCalculatorDGP0():
         self.control.landcoverFilenameList = landcoverFilenameList
         self.control.loaded = True
 
-    ##################### READ IN A MESH IN FORT.14 FORMAT #######################
+    ######################## Function to set control parameters ###################
     
-    def readMeshFile(self, meshFilename):
+    def setControlParameters(self, outputFilename, meshFilename, numDEMs=0, demFilenameList=[], numLCs=0, landcoverFilenameList=[]):
+        self.control.outputFilename = outputFilename
+        self.control.meshFilename = meshFilename
+        self.control.numDEMs = numDEMs
+        self.control.demFilenameList = demFilenameList
+        self.control.numLCs = numLCs
+        self.control.landcoverFilenameList = landcoverFilenameList
+        self.control.loaded = True
+
+    ##################### READ IN A MESH IN FORT.14 FORMAT #######################
+
+    def readMeshFile(self, meshFilename=None):
         
         import pandas as pd
         import matplotlib.tri as mtri
         import numpy as np
         
+        if meshFilename == None:
+            meshFilename = self.control.meshFilename
+        else:
+            self.control.meshFilename = meshFilename
+
         # initialize variables 
         
         x = []
@@ -166,13 +186,14 @@ class SubgridCalculatorDGP0():
         self.mesh.numNod = numNod
         self.mesh.numEle = numEle
         self.mesh.loaded = True
+
+        self.createEdgeList()
         
     ############ CALCULATE AREA OF A TRIANGLE #######################################
     
     def triarea(x1,y1,x2,y2,x3,y3):
         
-        area = abs((x1 * (y2-y3) + x2 * (y3 - y1)
-                + x3 * (y1 -y2)) / 2.0)
+        area = 0.5 * abs(x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2))
     
         return area
     
@@ -209,16 +230,24 @@ class SubgridCalculatorDGP0():
         import sys
         from subgrid_calculator_dgp0 import SubgridCalculatorDGP0 as scm
 
+        dbuf = 1e-8
+
         dl = math.sqrt((x1-x2)*(x1-x2) + (y1-y2)*(y1-y2))
         tx = (x2 - x1)/dl
         ty = (y2 - y1)/dl
-        if tx >= 0.0:
+        if tx == 0.0:
+            jd1 = -1
+            jd2 = jd1
+        elif tx > 0.0:
             jd1 = -1
             jd2 = 0
         else:
             jd1 = 0
             jd2 = -1
-        if ty >= 0.0:
+        if ty == 0.0:
+            id1 = 0
+            id2 = id1
+        elif ty > 0.0:
             id1 = 0
             id2 = -1
         else:
@@ -244,13 +273,13 @@ class SubgridCalculatorDGP0():
 
         while True:
             if tx >= 0.0:
-                jj2 = jj1 + 1
+                jj2 = min(jj1 + 1,nj-1)
             else:
-                jj2 = jj1 - 1
+                jj2 = max(jj1 - 1,0)
             if ty >= 0.0:
-                ii2 = ii1 - 1
+                ii2 = max(ii1 - 1,0)
             else:
-                ii2 = ii1 + 1
+                ii2 = min(ii1 + 1,ni-1)
 
             if ii1 < 0 or ii1 >= ni:
                 raise Exception('Invalid i1 value')
@@ -262,45 +291,47 @@ class SubgridCalculatorDGP0():
                 p1y = y[ii1,jj1]            
 
                 # Test the upper or lower neighbor cell
-                p2x = x[ii2,jj1]
-                p2y = y[ii2,jj1]
-                p3x = 0.5*(p1x+p2x)
-                p3y = 0.5*(p1y+p2y)                        
+                if ii1 != ii2 and ty != 0.0:
+                    p2x = x[ii2,jj1]
+                    p2y = y[ii2,jj1]
+                    p3x = 0.5*(p1x+p2x)
+                    p3y = 0.5*(p1y+p2y)                        
 
-                d0 = abs(p3y - p0y)
-                alpha = d0/abs(ty)
+                    d0 = abs(p3y - p0y)
+                    alpha = d0/abs(ty)
 
-                p4x = p0x + alpha*tx
-                p4y = p0y + alpha*ty
+                    p4x = p0x + alpha*tx
+                    p4y = p0y + alpha*ty
 
-                if p4x >= p3x - 0.5*xDEMRes and p4x <= p3x + 0.5*xDEMRes:
-                    mask[ii2,jj1] = True
-                    p0x = p4x
-                    p0y = p4y
-                    ii1 = ii2
-                    break
+                    if p4x >= p3x - 0.5*xDEMRes - dbuf and p4x <= p3x + 0.5*xDEMRes +dbuf:
+                        mask[ii2,jj1] = True
+                        p0x = p4x
+                        p0y = p4y
+                        ii1 = ii2
+                        break
 
                 # Test the left or right neighbor cell
-                p2x = x[ii1,jj2]
-                p2y = y[ii1,jj2]
-                p3x = 0.5*(p1x+p2x)
-                p3y = 0.5*(p1y+p2y)                        
+                if jj1 != jj2 and tx != 0.0:
+                    p2x = x[ii1,jj2]
+                    p2y = y[ii1,jj2]
+                    p3x = 0.5*(p1x+p2x)
+                    p3y = 0.5*(p1y+p2y)                        
 
-                d0 = abs(p3x - p0x)
-                alpha = d0/abs(tx)
+                    d0 = abs(p3x - p0x)
+                    alpha = d0/abs(tx)
 
-                p4x = p0x + alpha*tx
-                p4y = p0y + alpha*ty
+                    p4x = p0x + alpha*tx
+                    p4y = p0y + alpha*ty
 
-                if p4y >= p3y - 0.5*yDEMRes and p4y <= p3y + 0.5*yDEMRes:
-                    mask[ii1,jj2] = True
-                    p0x = p4x
-                    p0y = p4y
-                    jj1 = jj2
-                    break
+                    if p4y >= p3y - 0.5*yDEMRes - dbuf and p4y <= p3y + 0.5*yDEMRes + dbuf:
+                        mask[ii1,jj2] = True
+                        p0x = p4x
+                        p0y = p4y
+                        jj1 = jj2
+                        break
 
                 raise Exception('Next cell not found')
-
+            
             if ii1 == i2 and jj1 == j2:
                 break
 
@@ -557,11 +588,49 @@ class SubgridCalculatorDGP0():
        
         # create a dictionary to hold the dem data
         elevationDict = {}
-        
-        for i in range(len(self.control.demFilenameList)):
-            
-            # read in DEM
-            elevationData = scm.importDEM(self.control.demFilenameList[i])
+
+        if self.control.demFilenameList:
+            nDEMFilenameList = len(self.control.demFilenameList)
+        else:
+            nDEMFilenameList = 1
+
+        if self.control.demFilenameList:
+            for i in range(nDEMFilenameList):
+                
+                # read in DEM
+                elevationData = scm.importDEM(self.control.demFilenameList[i])
+                # x coordinates of DEM
+                xDEMTemp = elevationData[0]
+                # y coordinates of DEM
+                yDEMTemp = elevationData[1]
+                # elevations of DEM
+                zDEMTemp = elevationData[2]
+                # resolution in the x direction
+                xDEMResTemp = elevationData[3]
+                # resolution in the y direction
+                yDEMResTemp = -1*elevationData[4]
+                # x coordinates of DEM in 1D array
+                xDEMCoordsTemp = elevationData[5]
+                # y coordinates of DEM in 1D array
+                yDEMCoordsTemp = elevationData[6]
+                # deallocate DEM data 
+                elevationData = None
+                
+                # get dem bounds to determine what dem to use when looping
+                
+                elevationDict["bounds%s"%i] = [np.min(xDEMCoordsTemp),
+                                                np.max(xDEMCoordsTemp),
+                                                np.min(yDEMCoordsTemp),
+                                                np.max(yDEMCoordsTemp)]
+                
+                print('Finished reading DEM {0}.'.format(i))
+        else:
+            try:
+                # set elevationData from user defined method
+                elevationData = self.importDEM_external()
+            except:
+                raise Exception('Class method importDEM_external not defined') 
+
             # x coordinates of DEM
             xDEMTemp = elevationData[0]
             # y coordinates of DEM
@@ -577,17 +646,15 @@ class SubgridCalculatorDGP0():
             # y coordinates of DEM in 1D array
             yDEMCoordsTemp = elevationData[6]
             # deallocate DEM data 
-            elevationData = None
+            # elevationData = None
             
             # get dem bounds to determine what dem to use when looping
             
-            elevationDict["bounds%s"%i] = [np.min(xDEMCoordsTemp),
+            elevationDict["bounds%s"%0] = [np.min(xDEMCoordsTemp),
                                             np.max(xDEMCoordsTemp),
                                             np.min(yDEMCoordsTemp),
-                                            np.max(yDEMCoordsTemp)]
-            
-            print('Finished reading DEM {0}.'.format(i))
-            
+                                            np.max(yDEMCoordsTemp)]                
+             
         # deallocate arrays
         xDEMTemp = None
         yDEMTemp = None
@@ -615,13 +682,13 @@ class SubgridCalculatorDGP0():
         containedElementList0Index = []
         noElementDEMs = []
         
-        for i in range(len(self.control.demFilenameList)):
+        for i in range(nDEMFilenameList):
 
             # find which elements are in the DEM
-            totalEleInfoTable[:,5] = ((totalEleInfoTable[:,1]>elevationDict["bounds%s"%i][0])
-                                      & ((totalEleInfoTable[:,2])<elevationDict["bounds%s"%i][1])
-                                      & ((totalEleInfoTable[:,3])>elevationDict["bounds%s"%i][2])
-                                      & ((totalEleInfoTable[:,4])<elevationDict["bounds%s"%i][3]))
+            totalEleInfoTable[:,5] = ((totalEleInfoTable[:,1]>=elevationDict["bounds%s"%i][0])
+                                      & ((totalEleInfoTable[:,2])<=elevationDict["bounds%s"%i][1])
+                                      & ((totalEleInfoTable[:,3])>=elevationDict["bounds%s"%i][2])
+                                      & ((totalEleInfoTable[:,4])<=elevationDict["bounds%s"%i][3]))
         
             whichAreInside = list(np.where(totalEleInfoTable[:,5] == 1)[0])
             elementDict["DEM%s"%i] = totalEleInfoTable[whichAreInside,0].astype(int)        # store element numbers of the elements inside the DEM bound
@@ -630,7 +697,7 @@ class SubgridCalculatorDGP0():
             totalEleInfoTable = np.delete(totalEleInfoTable,whichAreInside,axis=0)          # delete elements so we can skip those in the next dem
 
             # keep track if a dem does not have any elements inside to throw and exception later
-            if len(whichAreInside) == 0:
+            if len(whichAreInside) == 0 and self.control.demFilenameList:
                 noElementDEMs.append(self.control.demFilenameList[i])
             
             containedElementList0Index.append(whichAreInsideActualEleNumber)    # create a list of elements within subgrid area
@@ -684,61 +751,84 @@ class SubgridCalculatorDGP0():
             cmf = np.array([],dtype=np.float32)
 
         # specify buffer to use in area calculator
-        # areaDif = 0.00001 
-        areaDif = 0.00000001 
+        areaDif = 0.00001 
+        # areaDif = 0.00000001 
         
         # create variable to keep track of what DEM you have read in
         
+        # dictionary to translate between C-CAP and Manning's values
+        # landCoverToManning = {0:0.02,2:0.12,3:0.12,4:0.12,5:0.035,6:0.1,7:0.05,8:0.035,
+        #                   9:0.16,10:0.18,11:0.17,12:0.08,13:0.15,14:0.075,
+        #                   15:0.06,16:0.15,17:0.07,18:0.05,19:0.03,20:0.03,
+        #                   21:0.025,22:0.035,23:0.03,25:0.012}
+        # change mannings conversion to match OM2D
+        landCoverToManning = {0:0.02, 2:0.15, 3:0.10, 4:0.05, 5:0.02,
+                                6:0.037, 7:0.033, 8:0.034, 9:0.1, 10:0.11,
+                                11:0.1, 12:0.05, 13:0.1, 14:0.048, 15:0.045,
+                                16:0.1, 17:0.048, 18:0.045, 19:0.04,
+                                20:0.09, 21:0.02, 22:0.015, 23:0.015, 
+                                24:0.09, 25:0.01}
+        # updated to SACS C-CAP mannings table
+        # landCoverToManning = {0:0.025, 2:0.12, 3:0.10, 4:0.07, 5:0.035,
+        #                       6:0.01, 7:0.055, 8:0.035, 9:0.16, 10:0.18,
+        #                       11:0.17, 12:0.08, 13:0.15, 14:0.075, 15:0.07,
+        #                       16:0.15, 17:0.07, 18:0.05, 19:0.03,
+        #                       20:0.03, 21:0.025, 22:0.035, 23:0.03, 
+        #                       24:0.09, 25:0.01}
+        
+        # landCoverValues = [0,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,25]
+        # add landcover 24
+        landCoverValues = [0,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,25]
+
         # first create a loop for DEMs
-        for i in range(len(self.control.demFilenameList)):
+        for i in range(nDEMFilenameList):
             
             # reading in DEM again
             # all variables the same as before
-            elevationData = scm.importDEM(self.control.demFilenameList[i])
-            landcoverData = scm.importDEM(self.control.landcoverFilenameList[i])
-            xDEM = elevationData[0]
-            yDEM = elevationData[1]
-            zDEM = elevationData[2]
-            xDEMRes = elevationData[3]
-            yDEMRes = -1*elevationData[4]
-            xDEMCoords = elevationData[5]
-            yDEMCoords = elevationData[6]
-            elevationData = None # deallocate 
-            nArray = landcoverData[2] # array of mannings n values
-            landcoverData = None # deallocate
-            # dictionary to translate between C-CAP and Manning's values
-            # landCoverToManning = {0:0.02,2:0.12,3:0.12,4:0.12,5:0.035,6:0.1,7:0.05,8:0.035,
-            #                   9:0.16,10:0.18,11:0.17,12:0.08,13:0.15,14:0.075,
-            #                   15:0.06,16:0.15,17:0.07,18:0.05,19:0.03,20:0.03,
-            #                   21:0.025,22:0.035,23:0.03,25:0.012}
-            # change mannings conversion to match OM2D
-            landCoverToManning = {0:0.02, 2:0.15, 3:0.10, 4:0.05, 5:0.02,
-                                  6:0.037, 7:0.033, 8:0.034, 9:0.1, 10:0.11,
-                                  11:0.1, 12:0.05, 13:0.1, 14:0.048, 15:0.045,
-                                  16:0.1, 17:0.048, 18:0.045, 19:0.04,
-                                  20:0.09, 21:0.02, 22:0.015, 23:0.015, 
-                                  24:0.09, 25:0.01}
-            # updated to SACS C-CAP mannings table
-            # landCoverToManning = {0:0.025, 2:0.12, 3:0.10, 4:0.07, 5:0.035,
-            #                       6:0.01, 7:0.055, 8:0.035, 9:0.16, 10:0.18,
-            #                       11:0.17, 12:0.08, 13:0.15, 14:0.075, 15:0.07,
-            #                       16:0.15, 17:0.07, 18:0.05, 19:0.03,
-            #                       20:0.03, 21:0.025, 22:0.035, 23:0.03, 
-            #                       24:0.09, 25:0.01}
-            
-            # landCoverValues = [0,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,25]
-            # add landcover 24
-            landCoverValues = [0,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,25]
+            if self.control.demFilenameList:
+                elevationData = scm.importDEM(self.control.demFilenameList[i])
+                landcoverData = scm.importDEM(self.control.landcoverFilenameList[i])
 
-            # convert values
-            for value in landCoverValues:
-                nArray[nArray == value] = landCoverToManning[value]
-            
-            
-            # nArray[np.isnan(nArray)] = 0.012  # set nan values to 0.012 for ccap
-            
-            nArray[np.isnan(nArray)] = 0.02     # set nan values to 0.02
-            
+                xDEM = elevationData[0]
+                yDEM = elevationData[1]
+                zDEM = elevationData[2]
+                xDEMRes = elevationData[3]
+                yDEMRes = -1*elevationData[4]
+                xDEMCoords = elevationData[5]
+                yDEMCoords = elevationData[6]
+                elevationData = None # deallocate 
+                
+                nArray = landcoverData[2] # array of mannings n values
+                landcoverData = None # deallocate
+
+                # convert values
+                for value in landCoverValues:
+                    nArray[nArray == value] = landCoverToManning[value]
+                
+                
+                # nArray[np.isnan(nArray)] = 0.012  # set nan values to 0.012 for ccap
+                
+                nArray[np.isnan(nArray)] = 0.02     # set nan values to 0.02
+            else:
+                if not 'elevationData' in locals():
+                    try:
+                        # set elevationData from user defined method
+                        elevationData = self.importDEM_external()
+                    except:
+                        raise Exception('Class method importDEM_external not defined') 
+                
+                xDEM = elevationData[0]
+                yDEM = elevationData[1]
+                zDEM = elevationData[2]
+                xDEMRes = elevationData[3]
+                yDEMRes = -1*elevationData[4]
+                xDEMCoords = elevationData[5]
+                yDEMCoords = elevationData[6]
+                # elevationData = None # deallocate 
+                
+                print("Default Manning's N value = {} is used.".format(self.default_manningsn))
+                nArray = np.full(zDEM.shape,self.default_manningsn,dtype=np.double) # array of mannings n values
+                            
             # get a list of elements within this DEM
             elementList = elementDict["DEM%s"%i].astype(int)
             
@@ -759,8 +849,11 @@ class SubgridCalculatorDGP0():
                 xyArray = np.array((currXPerimeterPoints,currYPerimeterPoints)).T
 
                 # convert to meters for area calculations
-                xyCurrElementMeters = scm.projectMeshToMercator(xyArray[:,1],
-                                                                xyArray[:,0])
+                if self.need_projection:
+                    xyCurrElementMeters = scm.projectMeshToMercator(xyArray[:,1],
+                                                                    xyArray[:,0])
+                else:
+                    xyCurrElementMeters = [xyArray[:,0],xyArray[:,1]]
                 
                 # calculate the area of the element
                 eleArea = scm.triarea(xyCurrElementMeters[0][0],
@@ -791,6 +884,9 @@ class SubgridCalculatorDGP0():
                 xCutGeoTiffMatrix2 = xDEM[minRow:maxRow+1,minCol:maxCol+1]
                 yCutGeoTiffMatrix2 = yDEM[minRow:maxRow+1,minCol:maxCol+1]
                 zCutGeoTiffMatrix2 = zDEM[minRow:maxRow+1,minCol:maxCol+1]
+                # print(np.max(currYPerimeterPoints),np.min(currYPerimeterPoints),np.min(currXPerimeterPoints),np.max(currXPerimeterPoints))
+                # print(maxY,minY,minX,maxX)
+                # print(minRow,maxRow,minCol,maxCol)
                 nCutGeoTiffMatrix2 = nArray[minRow:maxRow+1,minCol:maxCol+1]
             
                 # for use in determining what cells lie within the element
@@ -804,6 +900,9 @@ class SubgridCalculatorDGP0():
                                     currXPerimeterPoints[2],currYPerimeterPoints[2],
                                     xCutGeoTiffMatrix2,yCutGeoTiffMatrix2,
                                     difCriteria)
+                mask = np.logical_and(mask, np.isfinite(zCutGeoTiffMatrix2))
+                # print(xCutGeoTiffMatrix2)
+                # print(yCutGeoTiffMatrix2)
                 
                 # convert mask to cupy array
                 mask = cp.asarray(mask)
@@ -814,8 +913,9 @@ class SubgridCalculatorDGP0():
                 nCutGeoTiffMatrix2masked = nCutGeoTiffMatrix2[mask]
                 
                 # get the min/max elevation of the element
-                minElev = cp.min(zCutGeoTiffMatrix2masked)
-                maxElev = cp.max(zCutGeoTiffMatrix2masked)
+                # print(zCutGeoTiffMatrix2masked.shape,nCutGeoTiffMatrix2masked.shape)
+                minElev = cp.nanmin(zCutGeoTiffMatrix2masked)
+                maxElev = cp.nanmax(zCutGeoTiffMatrix2masked)
 
                 # count how many cells are within element
                 countIn = cp.count_nonzero(mask)
@@ -831,7 +931,7 @@ class SubgridCalculatorDGP0():
                 # create array of surface elevations
                 # this is used to calculate the subgrid variables for varying water depths
                 surfElevIncrement = self.surfElevIncrement
-                minElevFloor = math.floor(minElev*10)/10
+                minElevFloor = math.floor(minElev/surfElevIncrement)*surfElevIncrement
                 surfaceElevations = np.arange(minElevFloor,maxElev+surfElevIncrement,surfElevIncrement)
                 if len(surfaceElevations) < 2:
                     surfaceElevations = np.array([minElev,maxElev]).astype(np.float32)
@@ -899,7 +999,7 @@ class SubgridCalculatorDGP0():
                 # calulate now for the element then sum later for use 
                 # in other calulations
                 tempcf = 9.81*tempManningWetArray**2/tempTotWatDepthWetArray**(1/3)
-
+                tempcf[cp.where(tempcf==0.0)] = np.nan
                 ###############################################################
                 
                 if self.level0andLevel1:
@@ -908,7 +1008,7 @@ class SubgridCalculatorDGP0():
                     # rvBottomTermList += np.nansum(tempTotWatDepthWetArray**(3/2)*\
                     #     (tempcf)**(-1/2),axis = 0)
                     rvBottomTermList += cp.nansum(tempTotWatDepthWetArray**(3/2)*\
-                        (tempcf)**(-1/2),axis = 0)                    
+                        (tempcf)**(-1/2),axis = 0)
 
                 # finally sum and add cf for use in grid averaged calculation
                 # tempcf = np.nansum(tempcf,axis=0)
@@ -920,7 +1020,10 @@ class SubgridCalculatorDGP0():
                 gridAvgTotWatDepth = totWatElementList/countInElement
                 wetFractionTemp = wetDryElementList/countInElement
                 cfTemp = cfElementList/countInElement
-                cmfTemp = (wetAvgTotWatDepth)*(wetAvgTotWatDepth/(rvBottomTermList/wetDryElementList))**2
+                if self.level0andLevel1:
+                    rvBottomTermList[cp.where(rvBottomTermList==0.0)] = np.nan
+                    cmfTemp = (wetAvgTotWatDepth)*(wetAvgTotWatDepth/(rvBottomTermList/wetDryElementList))**2
+                    cmfTemp[cp.where(cmfTemp==np.nan)] = 0.0
 
                 ####### convert to np array #######
                 def get_ndarray(array):
@@ -960,12 +1063,12 @@ class SubgridCalculatorDGP0():
                     print("Finished Element {0} of {1} in DEM {2} took {3}".format(countElementLoop,len(elementList),i,stopTime - startTime))
 
         # add bottom limit on cf and cmf
-        cf[cf<0.0025] = 0.0025
-        cf[np.isnan(cf)] = 0.0025
+        cf[cf<self.cf_lower_lim] = self.cf_lower_lim
+        cf[np.isnan(cf)] = self.cf_lower_lim
         
         if self.level0andLevel1:
-            cmf[cmf<0.0025] = 0.0025   
-            cmf[np.isnan(cmf)] = 0.0025
+            cmf[cmf<self.cf_lower_lim] = self.cf_lower_lim
+            cmf[np.isnan(cmf)] = self.cf_lower_lim
             
         wetFraction[np.isnan(wetFraction)] = 0.0
         wetTotWatDepth[np.isnan(wetTotWatDepth)] = 0.0
@@ -1047,9 +1150,38 @@ class SubgridCalculatorDGP0():
         # create a dictionary to hold the dem data
         elevationDict = {}
         
-        for i in range(len(self.control.demFilenameList)):            
-           
-            elevationData = scm.importDEM(self.control.demFilenameList[i])  # read in DEM        
+        if self.control.demFilenameList:
+            nDEMFilenameList = len(self.control.demFilenameList)
+        else:
+            nDEMFilenameList = 1
+
+        if self.control.demFilenameList:
+            for i in range(len(self.control.demFilenameList)):            
+            
+                elevationData = scm.importDEM(self.control.demFilenameList[i])  # read in DEM        
+                xDEMTemp = elevationData[0]        # x coordinates of DEM
+                yDEMTemp = elevationData[1]        # y coordinates of DEM
+                zDEMTemp = elevationData[2]        # elevations of DEM
+                xDEMResTemp = elevationData[3]     # resolution in the x direction
+                yDEMResTemp = -1*elevationData[4]  # resolution in the y direction
+                xDEMCoordsTemp = elevationData[5]  # x coordinates of DEM in 1D array
+                yDEMCoordsTemp = elevationData[6]  # y coordinates of DEM in 1D array
+                elevationData = None               # deallocate DEM data
+                
+                # get dem bounds to determine what dem to use when looping            
+                elevationDict["bounds%s"%i] = [np.min(xDEMCoordsTemp),
+                                            np.max(xDEMCoordsTemp),
+                                            np.min(yDEMCoordsTemp),
+                                            np.max(yDEMCoordsTemp)]
+                
+                print('Finished reading DEM {0}.'.format(i))
+        else:
+            try:
+                # set elevationData from user defined method
+                elevationData = self.importDEM_external()
+            except:
+                raise Exception('Class method importDEM_external not defined') 
+            
             xDEMTemp = elevationData[0]        # x coordinates of DEM
             yDEMTemp = elevationData[1]        # y coordinates of DEM
             zDEMTemp = elevationData[2]        # elevations of DEM
@@ -1057,16 +1189,14 @@ class SubgridCalculatorDGP0():
             yDEMResTemp = -1*elevationData[4]  # resolution in the y direction
             xDEMCoordsTemp = elevationData[5]  # x coordinates of DEM in 1D array
             yDEMCoordsTemp = elevationData[6]  # y coordinates of DEM in 1D array
-            elevationData = None               # deallocate DEM data
+            # elevationData = None               # deallocate DEM data
             
             # get dem bounds to determine what dem to use when looping            
-            elevationDict["bounds%s"%i] = [np.min(xDEMCoordsTemp),
-                                           np.max(xDEMCoordsTemp),
-                                           np.min(yDEMCoordsTemp),
-                                           np.max(yDEMCoordsTemp)]
-            
-            print('Finished reading DEM {0}.'.format(i))
-            
+            elevationDict["bounds%s"%0] = [np.min(xDEMCoordsTemp),
+                                        np.max(xDEMCoordsTemp),
+                                        np.min(yDEMCoordsTemp),
+                                        np.max(yDEMCoordsTemp)]
+                
         # deallocate arrays
         xDEMTemp = None
         yDEMTemp = None
@@ -1094,13 +1224,13 @@ class SubgridCalculatorDGP0():
         containedEdgList0Index = []
         noEdgDEMs = []
         
-        for i in range(len(self.control.demFilenameList)):
+        for i in range(nDEMFilenameList):
 
             # find which edges are in the DEM
-            totalEdgInfoTable[:,5] = ((totalEdgInfoTable[:,1]>elevationDict["bounds%s"%i][0])
-                                   & ((totalEdgInfoTable[:,2])<elevationDict["bounds%s"%i][1])
-                                   & ((totalEdgInfoTable[:,3])>elevationDict["bounds%s"%i][2])
-                                   & ((totalEdgInfoTable[:,4])<elevationDict["bounds%s"%i][3]))
+            totalEdgInfoTable[:,5] = ((totalEdgInfoTable[:,1]>=elevationDict["bounds%s"%i][0])
+                                  & ((totalEdgInfoTable[:,2])<=elevationDict["bounds%s"%i][1])
+                                  & ((totalEdgInfoTable[:,3])>=elevationDict["bounds%s"%i][2])
+                                  & ((totalEdgInfoTable[:,4])<=elevationDict["bounds%s"%i][3]))
         
             whichAreInside = list(np.where(totalEdgInfoTable[:,5] == 1)[0])
             edgDict["DEM%s"%i] = totalEdgInfoTable[whichAreInside,0].astype(int)        # store edge numbers of the edges inside the DEM bound
@@ -1160,19 +1290,32 @@ class SubgridCalculatorDGP0():
         # create variable to keep track of what DEM you have read in
         
         # first create a loop for DEMs
-        for i in range(len(self.control.demFilenameList)):
+        for i in range(nDEMFilenameList):
             
             # reading in DEM again
             # all variables the same as before
-            elevationData = scm.importDEM(self.control.demFilenameList[i])
-            xDEM = elevationData[0]
-            yDEM = elevationData[1]
-            zDEM = elevationData[2]
-            xDEMRes = elevationData[3]
-            yDEMRes = -1*elevationData[4]
-            xDEMCoords = elevationData[5]
-            yDEMCoords = elevationData[6]
-            elevationData = None # deallocate 
+            if self.control.demFilenameList:
+                elevationData = scm.importDEM(self.control.demFilenameList[i])
+                xDEM = elevationData[0]
+                yDEM = elevationData[1]
+                zDEM = elevationData[2]
+                xDEMRes = elevationData[3]
+                yDEMRes = -1*elevationData[4]
+                xDEMCoords = elevationData[5]
+                yDEMCoords = elevationData[6]
+                elevationData = None # deallocate 
+            else:
+                if not 'elevationData' in locals():
+                    elevationData = self.importDEM_external()
+
+                xDEM = elevationData[0]
+                yDEM = elevationData[1]
+                zDEM = elevationData[2]
+                xDEMRes = elevationData[3]
+                yDEMRes = -1*elevationData[4]
+                xDEMCoords = elevationData[5]
+                yDEMCoords = elevationData[6]
+                elevationData = None # deallocate 
 
             # get a list of edges within this DEM
             edgList = edgDict["DEM%s"%i].astype(int)
@@ -1193,8 +1336,11 @@ class SubgridCalculatorDGP0():
                 xyArray = np.array((currXPerimeterPoints,currYPerimeterPoints)).T
 
                 # convert to meters for area calculations
-                xyCurrElementMeters = scm.projectMeshToMercator(xyArray[:,1],
-                                                                xyArray[:,0])
+                if self.need_projection:
+                    xyCurrElementMeters = scm.projectMeshToMercator(xyArray[:,1],
+                                                                    xyArray[:,0])
+                else:
+                    xyCurrElementMeters = [xyArray[:,0],xyArray[:,1]]
                 
                 # calculate the length of the edge
                 edgLen = scm.seglength(xyCurrElementMeters[0][0],
@@ -1224,7 +1370,7 @@ class SubgridCalculatorDGP0():
                 yCutGeoTiffMatrix2 = yDEM[minRow:maxRow+1,minCol:maxCol+1]
                 zCutGeoTiffMatrix2 = zDEM[minRow:maxRow+1,minCol:maxCol+1]
             
-                # mask to find which cells are within an element
+                # mask to find which cells are along an element edge
                 mask = scm.isAlong(currXPerimeterPoints[0],currYPerimeterPoints[0],
                                    currXPerimeterPoints[1],currYPerimeterPoints[1],
                                    xCutGeoTiffMatrix2,yCutGeoTiffMatrix2,
@@ -1232,29 +1378,29 @@ class SubgridCalculatorDGP0():
                                 
                 # convert mask to cupy array
                 mask = cp.asarray(mask)
-                zCutGeoTiffMatrix2 = cp.asarray(zCutGeoTiffMatrix2)
                 
-                zCutGeoTiffMatrix2masked = zCutGeoTiffMatrix2[mask]
-                
-                # get the min/max elevation of the element
-                minElev = cp.min(zCutGeoTiffMatrix2masked)
-                maxElev = cp.max(zCutGeoTiffMatrix2masked)
-
                 # count how many cells are within element
                 countIn = cp.count_nonzero(mask)
                 
                 # if there are no cells within the element the DEM is too coarse
                 # you must decrease the DEM resolution in this area
                 if countIn == 0:
-                    sys.exit('DEM {0} resolution too coarse!'.format(i))
-            
+                    sys.exit('No DEM point along edge {}!'.format(edg))
+
                 # keep track of this for use later
-                countInEdg += countIn
+                countInEdg += countIn            
+                
+                zCutGeoTiffMatrix2 = cp.asarray(zCutGeoTiffMatrix2)
+                zCutGeoTiffMatrix2masked = zCutGeoTiffMatrix2[mask]
+                
+                # get the min/max elevation of the element
+                minElev = cp.nanmin(zCutGeoTiffMatrix2masked)
+                maxElev = cp.nanmax(zCutGeoTiffMatrix2masked)
             
                 # create array of surface elevations
                 # this is used to calculate the subgrid variables for varying water depths
                 surfElevIncrement = self.surfElevIncrement
-                minElevFloor = math.floor(minElev*10)/10
+                minElevFloor = math.floor(minElev/surfElevIncrement)*surfElevIncrement
                 surfaceElevations = np.arange(minElevFloor,maxElev+surfElevIncrement,surfElevIncrement)
                 if len(surfaceElevations) < 2:
                     surfaceElevations = np.array([minElev,maxElev]).astype(np.float32)
@@ -1505,7 +1651,13 @@ class SubgridCalculatorDGP0():
         from matplotlib.patches import Circle, Wedge, Polygon
         from matplotlib.collections import PatchCollection
         import matplotlib.pyplot as plt
-
+        import os
+ 
+        # Check whether the image path exists or not and create it if not
+        isExist = os.path.exists(imagePath)
+        if not isExist:
+            os.makedirs(imagePath)
+   
         # create polygons
         patches = []
         for i in range(self.mesh.numEle):
@@ -1532,6 +1684,7 @@ class SubgridCalculatorDGP0():
             plt.xlim([min(self.mesh.coord['Longitude']), max(self.mesh.coord['Longitude'])])
             plt.ylim([min(self.mesh.coord['Latitude']), max(self.mesh.coord['Latitude'])])
             plt.title(title)
+            ax.set_aspect('equal','box')
             # plt.show()
             fig.savefig("{:s}/sg_{:s}.png".format(imagePath,figfile),dpi=600,facecolor='white',edgecolor='none')
             plt.close()
@@ -1547,8 +1700,14 @@ class SubgridCalculatorDGP0():
                 import math
                 vinterp = np.zeros(numEle)
                 for ele in range(numEle):
-                    if se < minElevationEle[ele] or se > maxElevationEle[ele]:
+                    if se < minElevationEle[ele]:
                         vinterp[ele] = np.nan
+                    elif  se > maxElevationEle[ele]:
+                        if ele == numEle - 1:
+                            ii = len(ve) - 1
+                        else:
+                            ii = elemIndex[ele+1] - 1
+                        vinterp[ele] = ve[ii]
                     else:
                         ista = elemIndex[ele]
 
@@ -1588,11 +1747,12 @@ class SubgridCalculatorDGP0():
                 plt.xlim([min(self.mesh.coord['Longitude']), max(self.mesh.coord['Longitude'])])
                 plt.ylim([min(self.mesh.coord['Latitude']), max(self.mesh.coord['Latitude'])])
                 plt.title("{:s} at Elevation {:.1f}".format(title,se))
+                ax.set_aspect('equal','box')
                 # plt.show()
                 fig.savefig("{:s}/sg_{:s}_{:03d}.png".format(imagePath,figfile,i),dpi=600,facecolor='white',edgecolor='none')
                 plt.close()
 
-        surfElevForPlot = np.arange(-5.0,6.0,1.0)
+        surfElevForPlot = np.arange(-20.0,0.0,4.0)
 
         # mesh z
         vn = np.asarray(self.mesh.coord['Elevation'])
