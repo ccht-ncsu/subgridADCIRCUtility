@@ -10,7 +10,8 @@ Based on the code written by jlwoodr3
 #from zmq import curve_keypair
 import numpy as np
 #import cupy as cp
-
+import geopandas as gpd
+from shapely.geometry import Point
 
 class Control:
     """Class to store info in control file"""
@@ -675,6 +676,18 @@ class SubgridCalculatorDGP0():
         totalEleInfoTable[:,3] = np.min(yS,axis=1)  # populate minimum y values of the vertices of the element
         totalEleInfoTable[:,4] = np.max(yS,axis=1)  # populate maximum y values of the vertices of the element
         
+        # find if each element is within any of the given polygons
+        if hasattr(self.control, 'sgs_region_mask'):
+            polys = gpd.read_file(self.control.sgs_region_mask).unary_union
+            elemInsidePolygon = \
+            [all(gpd.GeoSeries([
+                Point(xS[j,0], yS[j,0]),
+                Point(xS[j,1], yS[j,1]),
+                Point(xS[j,2], yS[j,2])]
+                ).set_crs(epsg="4326").within(polys)) for j in range(numEle)]
+        else:
+            elemInsidePolygon = np.zeros(numEle).astype(bool)
+
         # loop through DEMs and determine which elements are in them
         # make sure to have DEMs in priority order meaning if you want to use fine
         # resolution in some areas have those dems listed first
@@ -690,7 +703,7 @@ class SubgridCalculatorDGP0():
                                       & ((totalEleInfoTable[:,3])>=elevationDict["bounds%s"%i][2])
                                       & ((totalEleInfoTable[:,4])<=elevationDict["bounds%s"%i][3]))
         
-            whichAreInside = list(np.where(totalEleInfoTable[:,5] == 1)[0])
+            whichAreInside = list(np.where([totalEleInfoTable[j,5] == 1 and elemInsidePolygon[j] for j in range(numEle)])[0])
             elementDict["DEM%s"%i] = totalEleInfoTable[whichAreInside,0].astype(int)        # store element numbers of the elements inside the DEM bound
             
             whichAreInsideActualEleNumber = totalEleInfoTable[whichAreInside,0].astype(int) # get the actual element numbers 
@@ -700,6 +713,7 @@ class SubgridCalculatorDGP0():
             if len(whichAreInside) == 0 and self.control.demFilenameList:
                 noElementDEMs.append(self.control.demFilenameList[i])
             
+
             containedElementList0Index.append(whichAreInsideActualEleNumber)    # create a list of elements within subgrid area
         
         # throw exception if a dem has no element and print those dem names
@@ -713,7 +727,7 @@ class SubgridCalculatorDGP0():
         
         # now delete double counted vertices and elements
         containedElementList0Index = np.unique(containedElementList0Index).astype(int)
-        
+
         # now I want to create a list of 1s and 0s to show whether or not a
         # vertex or element is in the subgrid region
         
@@ -741,8 +755,8 @@ class SubgridCalculatorDGP0():
         maxElevationEle[np.where(binaryElementList == 0)] = -99999
 
         # allocate the index that maps element to location in vector
-        elemIndex = np.zeros((numEle)).astype(np.int)
-        elemNumLevel = np.zeros((numEle)).astype(np.int)
+        elemIndex = np.zeros((numEle)).astype(int)
+        elemNumLevel = np.zeros((numEle)).astype(int)
         elemIndexCnt = 0
 
         # these variables are used if you want level 1 corrections
@@ -1078,8 +1092,8 @@ class SubgridCalculatorDGP0():
         print('Sorting...',end='')
         def sortarray(vals):
             sorted = np.zeros(len(vals)).astype(np.float32)
-            sortedIndexStart = np.zeros(numEle).astype(np.int)
-            sortedIndexEnd = np.zeros(numEle).astype(np.int)
+            sortedIndexStart = np.zeros(numEle).astype(int)
+            sortedIndexEnd = np.zeros(numEle).astype(int)
             sortedIndexCnt = 0
             for ele in range(numEle):
                 numLevels = elemNumLevel[ele]
@@ -1217,6 +1231,17 @@ class SubgridCalculatorDGP0():
         totalEdgInfoTable[:,3] = np.min(yS,axis=1)  # populate minimum y values of the vertices of the edge
         totalEdgInfoTable[:,4] = np.max(yS,axis=1)  # populate maximum y values of the vertices of the edge
         
+        # find if each element is within any of the given polygons
+        if hasattr(self.control, 'sgs_region_mask'):
+            polys = gpd.read_file(self.control.sgs_region_mask).unary_union
+            edgeInsidePolygon = \
+            [all(gpd.GeoSeries([
+                Point(xS[j,0], yS[j,0]),
+                Point(xS[j,1], yS[j,1])]
+                ).set_crs(epsg="4326").within(polys)) for j in range(numEdg)]
+        else:
+            edgeInsidePolygon = np.zeros(numEdg).astype(bool)
+            
         # loop through DEMs and determine which edges are in them
         # make sure to have DEMs in priority order meaning if you want to use fine
         # resolution in some areas have those dems listed first
@@ -1232,7 +1257,7 @@ class SubgridCalculatorDGP0():
                                   & ((totalEdgInfoTable[:,3])>=elevationDict["bounds%s"%i][2])
                                   & ((totalEdgInfoTable[:,4])<=elevationDict["bounds%s"%i][3]))
         
-            whichAreInside = list(np.where(totalEdgInfoTable[:,5] == 1)[0])
+            whichAreInside = list(np.where([totalEdgInfoTable[j,5] == 1 and edgeInsidePolygon[j] for j in range(numEdg)])[0])
             edgDict["DEM%s"%i] = totalEdgInfoTable[whichAreInside,0].astype(int)        # store edge numbers of the edges inside the DEM bound
             
             whichAreInsideActualEdgNumber = totalEdgInfoTable[whichAreInside,0].astype(int) # get the actual edge numbers 
@@ -1283,8 +1308,8 @@ class SubgridCalculatorDGP0():
         maxElevationEdg[np.where(binaryEdgList == 0)] = -99999
 
         # allocate the index that maps edge to location in vector
-        edgIndex = np.zeros((numEdg)).astype(np.int)
-        edgNumLevel = np.zeros((numEdg)).astype(np.int)
+        edgIndex = np.zeros((numEdg)).astype(int)
+        edgNumLevel = np.zeros((numEdg)).astype(int)
         edgIndexCnt = 0
 
         # create variable to keep track of what DEM you have read in
@@ -1497,8 +1522,8 @@ class SubgridCalculatorDGP0():
         print('Sorting...',end='')
         def sortarray(vals):
             sorted = np.zeros(len(vals)).astype(np.float32)
-            sortedIndexStart = np.zeros(numEdg).astype(np.int)
-            sortedIndexEnd = np.zeros(numEdg).astype(np.int)
+            sortedIndexStart = np.zeros(numEdg).astype(int)
+            sortedIndexEnd = np.zeros(numEdg).astype(int)
             sortedIndexCnt = 0
             for edg in range(numEdg):
                 numLevels = edgNumLevel[edg]
@@ -1559,7 +1584,7 @@ class SubgridCalculatorDGP0():
         # write variable dimensions transposed because FORTRAN will read them that way
         # only need to do it for the 3D arrays, handle 2 and 1D a different way.
         # - element variables
-        elemIndex = ncFile.createVariable('elemLocations',np.int,'numElem')                       # indexes showing the locations of elements in the vectorized storage        
+        elemIndex = ncFile.createVariable('elemLocations',int,'numElem')                       # indexes showing the locations of elements in the vectorized storage        
         wetFractionVarElement = ncFile.createVariable('wetFraction',np.float32,'vecLen')  # elemental wet area fraction
         areaVar = ncFile.createVariable('area',np.float32,'numElem')                              # elemental areas
         totWatDepthVar = ncFile.createVariable('totWatDepth',np.float32,'vecLen')         # elemental grid averaged total water depth
@@ -1567,19 +1592,19 @@ class SubgridCalculatorDGP0():
         cfVarElement = ncFile.createVariable('cf',np.float32,'vecLen')                    # elemental coefficient of friction level 0
         if self.level0andLevel1:                                                                  # elemental coefficient of friction level 1
             cmfVarElement = ncFile.createVariable('cmf',np.float32,'vecLen')
-        binaryElementListVariable = ncFile.createVariable('binaryList',np.int,'numElem')      # variables showing which elements are contained within the subgrid area
+        binaryElementListVariable = ncFile.createVariable('binaryList',int,'numElem')      # variables showing which elements are contained within the subgrid area
         minElevationEleVariable = ncFile.createVariable('minElevation',np.float32,'numElem')  # min elevation
         maxElevationEleVariable = ncFile.createVariable('maxElevation',np.float32,'numElem')  # max elevation
         # - edge variables
-        edgeIndex = ncFile.createVariable('edgeLocations',np.int,'numEdge')                       # indexes showing the locations of elements in the vectorized storage        
+        edgeIndex = ncFile.createVariable('edgeLocations',int,'numEdge')                       # indexes showing the locations of elements in the vectorized storage        
         lenVarEdge = ncFile.createVariable('edgeLength',np.float32,'numEdge')                     # elemental areas
         totWatDepthVarEdge = ncFile.createVariable('edgeTotWatDepth',np.float32,'edgeVecLen')     # elemental grid averaged total water depth
         surfaceElevationsVarEdge = ncFile.createVariable('edgeSurfaceElevations',np.float32,'edgeVecLen') # surface elevation array
-        binaryEdgeListVariable = ncFile.createVariable('edgeBinaryList',np.int,'numEdge')         # variables showing which elements are contained within the subgrid area
+        binaryEdgeListVariable = ncFile.createVariable('edgeBinaryList',int,'numEdge')         # variables showing which elements are contained within the subgrid area
         minElevationEdgeVariable = ncFile.createVariable('edgeMinElevation',np.float32,'numEdge') # min elevation
         maxElevationEdgeVariable = ncFile.createVariable('edgeMaxElevation',np.float32,'numEdge') # max elevation
         # - element-to-edge table
-        el2ed = ncFile.createVariable('el2ed',np.int,('numElem','numEdgePerElem'))                # table to relate an element to its edges        
+        el2ed = ncFile.createVariable('el2ed',int,('numElem','numEdgePerElem'))                # table to relate an element to its edges        
         
         # assgin values
         # - element values
