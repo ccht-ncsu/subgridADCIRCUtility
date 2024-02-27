@@ -189,7 +189,7 @@ class SubgridCalculatorDGP0():
         self.mesh.loaded = True
 
         self.createEdgeList()
-        
+
     ############ CALCULATE AREA OF A TRIANGLE #######################################
     
     def triarea(x1,y1,x2,y2,x3,y3):
@@ -503,11 +503,45 @@ class SubgridCalculatorDGP0():
         # Create the edge list
         edflg = np.zeros((numEle,3),dtype=int)
         neled = np.zeros((numEle,3),dtype=int)
-        nedno = np.zeros((0,2),dtype=int)
-        nedel = np.full((0,2),-1,dtype=int)
         led = np.zeros((3,2),dtype=int)
         nedges = 0
 
+        # Counting the number of edges
+        for iel in range(numEle):
+            n1 = self.mesh.tri[iel,0]
+            n2 = self.mesh.tri[iel,1]
+            n3 = self.mesh.tri[iel,2]
+            led[0,0] = n2
+            led[0,1] = n3
+            led[1,0] = n3
+            led[1,1] = n1
+            led[2,0] = n1
+            led[2,1] = n2
+
+            for ied in range(3):
+                if(edflg[iel,ied] == 1):
+                    continue
+
+                i1 = led[ied,0]
+                i2 = led[ied,1]
+
+                nedges = nedges + 1
+
+                for jjel in range(nndel[i1]):
+                    jel = ndel[i1,jjel]
+                    if jel == iel:
+                        continue
+                    for jed in range(3):
+                        j1 = self.mesh.tri[jel,(jed+1)%3]
+                        j2 = self.mesh.tri[jel,(jed+2)%3]
+                        if (j1 == i1 and j2 == i2) or (j1 == i2 and j2 == i1):
+                            edflg[jel,jed] = 1
+
+        edflg = np.zeros((numEle,3),dtype=int)
+        neled = np.zeros((numEle,3),dtype=int)
+        nedno = np.zeros((nedges,2),dtype=int)
+        nedel = np.full((nedges,2),-1,dtype=int)
+        nedges = 0
         for iel in range(numEle):
             n1 = self.mesh.tri[iel,0]
             n2 = self.mesh.tri[iel,1]
@@ -530,8 +564,8 @@ class SubgridCalculatorDGP0():
                 nedges = nedges + 1
 
                 neled[iel,ied] = ed_id
-                nedno = np.append(nedno, [[i1,i2]],axis=0)
-                nedel = np.append(nedel, [[iel,-1]],axis=0)
+                nedno[ed_id,:] = [i1,i2]
+                nedel[ed_id,:] = [iel,-1]
                 edflg[iel,ied] = 1
 
                 for jjel in range(nndel[i1]):
@@ -677,7 +711,7 @@ class SubgridCalculatorDGP0():
         totalEleInfoTable[:,4] = np.max(yS,axis=1)  # populate maximum y values of the vertices of the element
         
         # find if each element is within any of the given polygons
-        if hasattr(self.control, 'sgs_region_mask'):
+        if hasattr(self.control, 'sgs_region_mask') and self.control.sgs_region_mask:
             polys = gpd.read_file(self.control.sgs_region_mask).unary_union
             elemInsidePolygon = \
             [all(gpd.GeoSeries([
@@ -686,7 +720,7 @@ class SubgridCalculatorDGP0():
                 Point(xS[j,2], yS[j,2])]
                 ).set_crs(epsg="4326").within(polys)) for j in range(numEle)]
         else:
-            elemInsidePolygon = np.zeros(numEle).astype(bool)
+            elemInsidePolygon = np.ones(numEle).astype(bool)
 
         # loop through DEMs and determine which elements are in them
         # make sure to have DEMs in priority order meaning if you want to use fine
@@ -776,12 +810,12 @@ class SubgridCalculatorDGP0():
         #                   15:0.06,16:0.15,17:0.07,18:0.05,19:0.03,20:0.03,
         #                   21:0.025,22:0.035,23:0.03,25:0.012}
         # change mannings conversion to match OM2D
-        landCoverToManning = {0:0.02, 2:0.15, 3:0.10, 4:0.05, 5:0.02,
-                                6:0.037, 7:0.033, 8:0.034, 9:0.1, 10:0.11,
-                                11:0.1, 12:0.05, 13:0.1, 14:0.048, 15:0.045,
-                                16:0.1, 17:0.048, 18:0.045, 19:0.04,
-                                20:0.09, 21:0.02, 22:0.015, 23:0.015, 
-                                24:0.09, 25:0.01}
+        # landCoverToManning = {0:0.02, 2:0.15, 3:0.10, 4:0.05, 5:0.02,
+        #                         6:0.037, 7:0.033, 8:0.034, 9:0.1, 10:0.11,
+        #                         11:0.1, 12:0.05, 13:0.1, 14:0.048, 15:0.045,
+        #                         16:0.1, 17:0.048, 18:0.045, 19:0.04,
+        #                         20:0.09, 21:0.02, 22:0.015, 23:0.015, 
+        #                         24:0.09, 25:0.01}
         # updated to SACS C-CAP mannings table
         # landCoverToManning = {0:0.025, 2:0.12, 3:0.10, 4:0.07, 5:0.035,
         #                       6:0.01, 7:0.055, 8:0.035, 9:0.16, 10:0.18,
@@ -792,7 +826,16 @@ class SubgridCalculatorDGP0():
         
         # landCoverValues = [0,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,25]
         # add landcover 24
-        landCoverValues = [0,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,25]
+        # landCoverValues = [0,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,25]
+        
+        # dictionary to translate between NLCD and Manning's values
+        landCoverToManning = {0:0.02, 11:0.02, 12:0.01, 21:0.02, 22:0.05, 23:0.1,
+                              24:0.15, 31:0.09, 32:0.04, 41:0.1, 42:0.11, 43:0.1,
+                              51:0.04, 52:0.05, 71:0.034, 72:0.03, 73:0.027, 74:0.025,
+                              81:0.033, 82:0.037, 90:0.1, 91:0.1, 92:0.048, 93:0.1,
+                              94:0.048, 95:0.045, 96:0.045, 97:0.045, 98:0.015,
+                              99:0.015, 127:0.02}
+        landCoverValues = landCoverToManning.keys()
 
         # first create a loop for DEMs
         for i in range(nDEMFilenameList):
@@ -1240,7 +1283,7 @@ class SubgridCalculatorDGP0():
                 Point(xS[j,1], yS[j,1])]
                 ).set_crs(epsg="4326").within(polys)) for j in range(numEdg)]
         else:
-            edgeInsidePolygon = np.zeros(numEdg).astype(bool)
+            edgeInsidePolygon = np.ones(numEdg).astype(bool)
             
         # loop through DEMs and determine which edges are in them
         # make sure to have DEMs in priority order meaning if you want to use fine
