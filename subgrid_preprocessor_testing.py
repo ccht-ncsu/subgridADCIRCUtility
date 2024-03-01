@@ -831,26 +831,32 @@ class subgridCalculatormain():
                     manningsnCutNoNaNWet = manningsnCutNoNaN * wetCellsInSubArea
                     
                     tempcf = (9.81*manningsnCutNoNaNWet**2)/(temptotWatDepth**(1/3))
-                    
+
+                    # set nan values to cf calculated from mean mannings n and 8 cm of water
+                    if(np.any(wetCellsInSubAreaCount==0)):
+                        zeroIdx = np.where(wetCellsInSubAreaCount==0)[0]
+
                     # get wet averaged total water depth
-                    
+                        
                     wetTotWatDepth[ele,j,:] = np.nansum(temptotWatDepth,axis=1)/wetCellsInSubAreaCount
-                    
+                        
                     # get bottom friction
                     cf[ele,j,:] = np.nansum(tempcf,axis=1)/wetCellsInSubAreaCount # this is correct I need <Cf>W
+                    cf[ele,j,zeroIdx] = 9.81*np.mean(manningsnCutNoNaN)**2/(0.08**(1/3))
                     # cf[ele,j,:] = np.nansum(tempcf,axis=1)/cellsInSubElement
-                    
+                        
                     # get rv for advection correction and bottom friction correction
-                    
+                        
                     rv[ele,j,:] = wetTotWatDepth[ele,j,:]/(np.nansum((temptotWatDepth**(3/2))*(tempcf**(-1/2)),axis=1)/wetCellsInSubAreaCount)
-                    
+                        
                     # get advection correction
-                    
+                        
                     cadv[ele,j,:] = (1/wetTotWatDepth[ele,j,:])*(np.nansum(temptotWatDepth**2/tempcf,axis=1)/wetCellsInSubAreaCount)*rv[ele,j,:]**2
-                    
+                        
                     # get corrected bottom friction for level 1 corrections
-                    
+                        
                     cmf[ele,j,:] = wetTotWatDepth[ele,j,:]*rv[ele,j,:]**2 # this is correct I need <H>W * Rv**2
+                    cmf[ele,j,zeroIdx] = 9.81*np.mean(manningsnCutNoNaN)**2/(0.08**(1/3))
                 # do not use this in calculations anymore JLW 01302024
                 # maxElevationEle[ele] = np.max(maxElevationSubEle[ele,:])
             
@@ -867,11 +873,12 @@ class subgridCalculatormain():
         print("Elemental Calculations Took {}s".format(endElemental - startElemental))
                         
         cf[cf<0.0025] = 0.0025
-        cmf[cmf<0.0025] = 0.0025   
-        cf[np.isnan(cf)] = 0.0025
-        cmf[np.isnan(cmf)] = 0.0025
+        cmf[cmf<0.0025] = 0.0025 
+        # cf[np.isnan(cf)] = 0.0025
+        # cmf[np.isnan(cmf)] = 0.0025
         cadv[np.isnan(cadv)] = 1.0  
         
+
         wetFraction[np.isnan(wetFraction)] = 0.0
         wetTotWatDepth[np.isnan(wetTotWatDepth)] = 0.0
         totWatDepth[np.isnan(totWatDepth)] = 0.0
@@ -886,7 +893,7 @@ class subgridCalculatormain():
         vertexArea = np.zeros((numNode,num_SfcElevs))
         cfVertex = np.zeros((numNode,num_SfcElevs))
         cmfVertex = np.zeros((numNode,num_SfcElevs))
-        # cadvVertex = np.zeros((numNode,num_SfcElevs))
+        cadvVertex = np.zeros((numNode,num_SfcElevs))
         # do not use this in calculations anymore JLW 01302024
         # maxElevationVertex = np.ones(numNode)*-99999
         
@@ -971,6 +978,16 @@ class subgridCalculatormain():
                 cmfVertex[nm0,:] += cmf0 * area[i,0]
                 cmfVertex[nm1,:] += cmf1 * area[i,1]
                 cmfVertex[nm2,:] += cmf2 * area[i,2]
+
+                # JLW: add vertex based advection 
+                cadv0 = cadv[i,0,:]
+                cadv1 = cadv[i,1,:]
+                cadv2 = cadv[i,2,:]
+
+                cadvVertex[nm0,:] += cadv0 * area[i,0]
+                cadvVertex[nm1,:] += cadv1 * area[i,1]
+                cadvVertex[nm2,:] += cadv2 * area[i,2]
+
         
         # now average all of these by the vertex areas
         wetFractionVertex[np.where(binaryVertexList == 1)] = wetFractionVertex[np.where(binaryVertexList == 1)]/vertexArea[np.where(binaryVertexList == 1)]
@@ -978,6 +995,7 @@ class subgridCalculatormain():
         gridTotWatDepthVertex[np.where(binaryVertexList == 1)] = gridTotWatDepthVertex[np.where(binaryVertexList == 1)]/vertexArea[np.where(binaryVertexList == 1)]
         cfVertex[np.where(binaryVertexList == 1)] = cfVertex[np.where(binaryVertexList == 1)]/vertexArea[np.where(binaryVertexList == 1)]
         cmfVertex[np.where(binaryVertexList == 1)] = cmfVertex[np.where(binaryVertexList == 1)]/vertexArea[np.where(binaryVertexList == 1)]
+        cadvVertex[np.where(binaryVertexList == 1)] = cadvVertex[np.where(binaryVertexList == 1)]/vertexArea[np.where(binaryVertexList == 1)]
 
         end = time.time()
         
@@ -1001,6 +1019,7 @@ class subgridCalculatormain():
         gridTotWatDepthVertex[vertNotInSubgrid,:] = -99999
         cfVertex[vertNotInSubgrid,:] = -99999
         cmfVertex[vertNotInSubgrid,:] = -99999
+        cadvVertex[vertNotInSubgrid,:] = 1.0
                 
         desiredPhiList = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
         
@@ -1008,123 +1027,124 @@ class subgridCalculatormain():
         print('Checked if vertex in subgrid {} s'.format(end-start))
         # transpose the dimensions of the elemental subgrid arrays for writing 
         # netCDF
-        start = time.time()
+        # start = time.time()
         
-        wetFraction = wetFraction.T
-        totWatDepth = totWatDepth.T
-        cadv = cadv.T
+        # # do not need to write the elemental variables anymore 
+        # # wetFraction = wetFraction.T
+        # # totWatDepth = totWatDepth.T
+        # # cadv = cadv.T
         
         
-        # create empty arrays for the reduced tables
-        
-        depthsEleForLookup = np.zeros((11,3,len(wetFraction[0,0,:])))
-        HEleForLookup = np.zeros((11,3,len(wetFraction[0,0,:])))
-        cadvForLookup = np.zeros((11,3,len(wetFraction[0,0,:])))
+        # # create empty arrays for the reduced tables
+        # # do not need to write the elemental variables anymore 
+        # # depthsEleForLookup = np.zeros((11,3,len(wetFraction[0,0,:])))
+        # # HEleForLookup = np.zeros((11,3,len(wetFraction[0,0,:])))
+        # # cadvForLookup = np.zeros((11,3,len(wetFraction[0,0,:])))
                             
-        minSurfElev = np.min(surfaceElevations)
-        maxSurfElev = np.max(surfaceElevations)
+        # # minSurfElev = np.min(surfaceElevations)
+        # # maxSurfElev = np.max(surfaceElevations)
         
-        end = time.time()
-        print('Finished prepping for Reduction took {} s'.format(end-start))
+        # end = time.time()
+        # print('Finished prepping for Reduction took {} s'.format(end-start))
 
-        start = time.time()
+        # start = time.time()
         
-        for i in range(numEle):
+        # for i in range(numEle):
             
-            element = i
+        #     element = i
             
-            for j in range(3):
+        #     for j in range(3):
                 
-                vert = j
+        #         vert = j
                 
-                currPhiArray = wetFraction[:,vert,element]
+        #         currPhiArray = wetFraction[:,vert,element]
             
-                # find where currPhiArray is equal to 0
-                equalTo0 = np.where(currPhiArray == 0.0)[0]
+        #         # find where currPhiArray is equal to 0
+        #         equalTo0 = np.where(currPhiArray == 0.0)[0]
                 
-                if(len(equalTo0)!=0): # if 0.0 exists in the array
+        #         if(len(equalTo0)!=0): # if 0.0 exists in the array
                 
-                    depthsEleForLookup[0,vert,element] = surfaceElevations[equalTo0[-1]]
-                    HEleForLookup[0,vert,element] = totWatDepth[equalTo0[-1],vert,element]
-                    cadvForLookup[0,vert,element] = cadv[equalTo0[-1],vert,element]
+        #             depthsEleForLookup[0,vert,element] = surfaceElevations[equalTo0[-1]]
+        #             HEleForLookup[0,vert,element] = totWatDepth[equalTo0[-1],vert,element]
+        #             cadvForLookup[0,vert,element] = cadv[equalTo0[-1],vert,element]
                     
-                else: # so if it never gets fully dry set everything to the value corresponding to the first surface elevations
+        #         else: # so if it never gets fully dry set everything to the value corresponding to the first surface elevations
                 
-                    depthsEleForLookup[0,vert,element] = surfaceElevations[0]
-                    HEleForLookup[0,vert,element] = totWatDepth[0,vert,element]
-                    cadvForLookup[0,vert,element] = cadv[0,vert,element]
+        #             depthsEleForLookup[0,vert,element] = surfaceElevations[0]
+        #             HEleForLookup[0,vert,element] = totWatDepth[0,vert,element]
+        #             cadvForLookup[0,vert,element] = cadv[0,vert,element]
                     
-                # now check for when phi == 1.0 and find exactly where that is
+        #         # now check for when phi == 1.0 and find exactly where that is
                 
-                equalTo1 = np.where(currPhiArray == 1.0)[0]
+        #         equalTo1 = np.where(currPhiArray == 1.0)[0]
                 
-                if(len(equalTo1)!=0): # if 1.0 exists in the array
+        #         if(len(equalTo1)!=0): # if 1.0 exists in the array
 
-                    depthsEleForLookup[-1,vert,element] = surfaceElevations[equalTo1[0]]
-                    HEleForLookup[-1,vert,element] = totWatDepth[equalTo1[0],vert,element]
-                    cadvForLookup[-1,vert,element] = cadv[equalTo1[0],vert,element]
+        #             depthsEleForLookup[-1,vert,element] = surfaceElevations[equalTo1[0]]
+        #             HEleForLookup[-1,vert,element] = totWatDepth[equalTo1[0],vert,element]
+        #             cadvForLookup[-1,vert,element] = cadv[equalTo1[0],vert,element]
                     
-                else: # if there is nothing that is equal to 1 (so never gets fully wet, just set everything to correspind to the last surface elevation)
+        #         else: # if there is nothing that is equal to 1 (so never gets fully wet, just set everything to correspind to the last surface elevation)
                 
-                    depthsEleForLookup[-1,vert,element] = surfaceElevations[-1]
-                    HEleForLookup[-1,vert,element] = totWatDepth[-1,vert,element]
-                    cadvForLookup[-1,vert,element] = cadv[-1,vert,element]
+        #             depthsEleForLookup[-1,vert,element] = surfaceElevations[-1]
+        #             HEleForLookup[-1,vert,element] = totWatDepth[-1,vert,element]
+        #             cadvForLookup[-1,vert,element] = cadv[-1,vert,element]
                     
-                # now for everything else
+        #         # now for everything else
                 
-                for k in range(1,len(desiredPhiList)-1):
+        #         for k in range(1,len(desiredPhiList)-1):
                 
-                    desiredPhi = desiredPhiList[k]
-                    greaterThan = np.where(currPhiArray > desiredPhi)[0]
+        #             desiredPhi = desiredPhiList[k]
+        #             greaterThan = np.where(currPhiArray > desiredPhi)[0]
                     
-                    if(len(greaterThan)==0):  # so if nothing in the currPhiArray is greater than the desired phi 
+        #             if(len(greaterThan)==0):  # so if nothing in the currPhiArray is greater than the desired phi 
                     
-                    # set everything to correspond to the last surface elevation
+        #             # set everything to correspond to the last surface elevation
                     
-                        depthsEleForLookup[k,vert,element] = surfaceElevations[-1]
-                        HEleForLookup[k,vert,element] = totWatDepth[-1,vert,element]
-                        cadvForLookup[k,vert,element] = cadv[-1,vert,element]
+        #                 depthsEleForLookup[k,vert,element] = surfaceElevations[-1]
+        #                 HEleForLookup[k,vert,element] = totWatDepth[-1,vert,element]
+        #                 cadvForLookup[k,vert,element] = cadv[-1,vert,element]
                         
-                    elif(greaterThan[0] == 0): # so if the first currphi index is greater than the desired phi 
+        #             elif(greaterThan[0] == 0): # so if the first currphi index is greater than the desired phi 
                     
-                    # set everything to correspond to the first surfaceelevation
+        #             # set everything to correspond to the first surfaceelevation
 
-                        depthsEleForLookup[k,vert,element] = surfaceElevations[0]
-                        HEleForLookup[k,vert,element] = totWatDepth[0,vert,element]
-                        cadvForLookup[k,vert,element] = cadv[0,vert,element]
+        #                 depthsEleForLookup[k,vert,element] = surfaceElevations[0]
+        #                 HEleForLookup[k,vert,element] = totWatDepth[0,vert,element]
+        #                 cadvForLookup[k,vert,element] = cadv[0,vert,element]
             
                         
-                    else: # this is where we interpolate 
+        #             else: # this is where we interpolate 
                         
-                        greaterThan = greaterThan[0]
-                        lessThan = greaterThan - 1
+        #                 greaterThan = greaterThan[0]
+        #                 lessThan = greaterThan - 1
                   
-                        depthsEleForLookup[k,vert,element] = (((desiredPhi - currPhiArray[lessThan])
-                                                      /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
-                                                      *(surfaceElevations[greaterThan] - surfaceElevations[lessThan])
-                                                      + (surfaceElevations[lessThan]))
+        #                 depthsEleForLookup[k,vert,element] = (((desiredPhi - currPhiArray[lessThan])
+        #                                               /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
+        #                                               *(surfaceElevations[greaterThan] - surfaceElevations[lessThan])
+        #                                               + (surfaceElevations[lessThan]))
                         
-                        HEleForLookup[k,vert,element] = (((desiredPhi - currPhiArray[lessThan])
-                                                      /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
-                                                      *(totWatDepth[greaterThan,vert,element] - totWatDepth[lessThan,vert,element])
-                                                      + (totWatDepth[lessThan,vert,element]))
+        #                 HEleForLookup[k,vert,element] = (((desiredPhi - currPhiArray[lessThan])
+        #                                               /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
+        #                                               *(totWatDepth[greaterThan,vert,element] - totWatDepth[lessThan,vert,element])
+        #                                               + (totWatDepth[lessThan,vert,element]))
                         
-                        cadvForLookup[k,vert,element] = (((desiredPhi - currPhiArray[lessThan])
-                                                      /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
-                                                      *(cadv[greaterThan,vert,element] - cadv[lessThan,vert,element])
-                                                      + (cadv[lessThan,vert,element]))
+        #                 cadvForLookup[k,vert,element] = (((desiredPhi - currPhiArray[lessThan])
+        #                                               /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
+        #                                               *(cadv[greaterThan,vert,element] - cadv[lessThan,vert,element])
+        #                                               + (cadv[lessThan,vert,element]))
                     
                   
-        # fill the elements that are not contained in the subgrid region with -99999
-        depthsEleForLookup[:,:,np.where(binaryElementList==0)[0]] = -99999
-        HEleForLookup[:,:,np.where(binaryElementList==0)[0]] = -99999
-        cadvForLookup[:,:,np.where(binaryElementList==0)[0]] = -99999
-        # deallocate arrays
-        totWatDepth = None
-        cadv = None
-        wetFraction = None
-        end = time.time()
-        print('Reduction of partially wet elements took {} s'.format(end-start))
+        # # fill the elements that are not contained in the subgrid region with -99999
+        # depthsEleForLookup[:,:,np.where(binaryElementList==0)[0]] = -99999
+        # HEleForLookup[:,:,np.where(binaryElementList==0)[0]] = -99999
+        # cadvForLookup[:,:,np.where(binaryElementList==0)[0]] = -99999
+        # # deallocate arrays
+        # totWatDepth = None
+        # cadv = None
+        # wetFraction = None
+        # end = time.time()
+        # print('Reduction of partially wet elements took {} s'.format(end-start))
                     
 #### NOW WE NEED TO REPEAT THIS FOR THE VERTICES ########
         start = time.time() 
@@ -1133,6 +1153,7 @@ class subgridCalculatormain():
         HWVertForLookup = np.zeros((len(wetFractionVertex[:]),11))
         cfVertForLookup = np.zeros((len(wetFractionVertex[:]),11))
         cmfVertForLookup = np.zeros((len(wetFractionVertex[:]),11))
+        cadvVertForLookup = np.zeros((len(wetFractionVertex[:]),11))
             
         for i in range(numNode):
             
@@ -1152,6 +1173,7 @@ class subgridCalculatormain():
                 HWVertForLookup[vert,0] = wetTotWatDepthVertex[vert,equalTo0[-1]]
                 cfVertForLookup[vert,0] = cfVertex[vert,equalTo0[-1]]
                 cmfVertForLookup[vert,0] = cmfVertex[vert,equalTo0[-1]]
+                cadvVertForLookup[vert,0] = cadvVertex[vert,equalTo0[-1]]
                 
             else: # so if it never gets fully dry set everything to the value corresponding to the first surface elevations
             
@@ -1160,6 +1182,7 @@ class subgridCalculatormain():
                 HWVertForLookup[vert,0] = wetTotWatDepthVertex[vert,0]
                 cfVertForLookup[vert,0] = cfVertex[vert,0]
                 cmfVertForLookup[vert,0] = cmfVertex[vert,0]
+                cadvVertForLookup[vert,0] = cadvVertex[vert,0]
                 
             # now check for when phi == 1.0 and find exactly where that is
             
@@ -1172,6 +1195,7 @@ class subgridCalculatormain():
                 HWVertForLookup[vert,-1] = wetTotWatDepthVertex[vert,equalTo1[0]]
                 cfVertForLookup[vert,-1] = cfVertex[vert,equalTo1[0]]
                 cmfVertForLookup[vert,-1] = cmfVertex[vert,equalTo1[0]]
+                cadvVertForLookup[vert,-1] = cadvVertex[vert,equalTo1[0]]
                 
             else: # if there is nothing that is equal to 1 (so never gets fully wet, just set everything to correspind to the last surface elevation)
             
@@ -1180,6 +1204,7 @@ class subgridCalculatormain():
                 HWVertForLookup[vert,-1] = wetTotWatDepthVertex[vert,-1]
                 cfVertForLookup[vert,-1] = cfVertex[vert,-1]
                 cmfVertForLookup[vert,-1] = cmfVertex[vert,-1]
+                cadvVertForLookup[vert,-1] = cadvVertex[vert,-1]
                 
                 
             # now for everything else
@@ -1198,6 +1223,7 @@ class subgridCalculatormain():
                     HWVertForLookup[vert,k] = wetTotWatDepthVertex[vert,-1]
                     cfVertForLookup[vert,k] = cfVertex[vert,-1]
                     cmfVertForLookup[vert,k] = cmfVertex[vert,-1]
+                    cadvVertForLookup[vert,k] = cadvVertex[vert,-1]
                     
                 elif(greaterThan[0] == 0): # so if the first currphi index is greater than the desired phi 
                 
@@ -1208,6 +1234,7 @@ class subgridCalculatormain():
                     HWVertForLookup[vert,k] = wetTotWatDepthVertex[vert,0]
                     cfVertForLookup[vert,k] = cfVertex[vert,0]
                     cmfVertForLookup[vert,k] = cmfVertex[vert,0]
+                    cadvVertForLookup[vert,k] = cadvVertex[vert,0]
         
                     
                 else: # this is where we interpolate 
@@ -1244,6 +1271,11 @@ class subgridCalculatormain():
                                                   *(cmfVertex[vert,greaterThan]
                                                     - cmfVertex[vert,lessThan])
                                                   + (cmfVertex[vert,lessThan]))
+                    cadvVertForLookup[vert,k] = (((desiredPhi - currPhiArray[lessThan])
+                                                  /(currPhiArray[greaterThan] - currPhiArray[lessThan]))
+                                                  *(cadvVertex[vert,greaterThan]
+                                                    - cadvVertex[vert,lessThan])
+                                                  + (cadvVertex[vert,lessThan]))
             
                 
 
@@ -1254,6 +1286,7 @@ class subgridCalculatormain():
         HWVertForLookup[vertNotInSubgrid,:] = -99999
         cfVertForLookup[vertNotInSubgrid,:] = -99999
         cmfVertForLookup[vertNotInSubgrid,:] = -99999
+        cadvVertForLookup[vertNotInSubgrid,:] = 1.0
 
         # deallocate arrays 
         wetFractionVertex = None
@@ -1289,23 +1322,23 @@ class subgridCalculatormain():
         # create array for depth in reduced vertex table
         wetFractionDepthVarVertex = ncFile.createVariable('wetFractionVertex',np.float32,
                                             ('numNode','numPhi'))
+        # comment out elemental variables since not needed
+        # # create array for depth in reduced element table
+        # wetFractionVarDepths = ncFile.createVariable('wetFractionDepths',np.float32,
+        #                                         ('numPhi','numVert','numEle'))
+        # # elemental areas
+        # areaVar = ncFile.createVariable('area',np.float32,('numEle','numVert'))
         
-        # create array for depth in reduced element table
-        wetFractionVarDepths = ncFile.createVariable('wetFractionDepths',np.float32,
-                                                ('numPhi','numVert','numEle'))
-        # elemental areas
-        areaVar = ncFile.createVariable('area',np.float32,('numEle','numVert'))
+        # # elemental grid averaged total water depth
+        # totWatDepthVar = ncFile.createVariable('totWatDepth',np.float32,
+        #                                         ('numPhi','numVert','numEle'))
         
-        # elemental grid averaged total water depth
-        totWatDepthVar = ncFile.createVariable('totWatDepth',np.float32,
-                                                ('numPhi','numVert','numEle'))
-        
-        # # surface elevation array
-        # surfaceElevationsVar = ncFile.createVariable('surfaceElevations',np.float32,'numSfcElevs')
-        # minimum surface elevation
-        minSurfElevVar = ncFile.createVariable('minSurfElev',np.float32,'oneDim')
-        # maximum surface elevation
-        maxSurfElevVar = ncFile.createVariable('maxSurfElev',np.float32,'oneDim')
+        # # # surface elevation array
+        # # surfaceElevationsVar = ncFile.createVariable('surfaceElevations',np.float32,'numSfcElevs')
+        # # minimum surface elevation
+        # minSurfElevVar = ncFile.createVariable('minSurfElev',np.float32,'oneDim')
+        # # maximum surface elevation
+        # maxSurfElevVar = ncFile.createVariable('maxSurfElev',np.float32,'oneDim')
         
         # vertex wet total water depth
         wetTotWatDepthVarVertex = ncFile.createVariable('wetTotWatDepthVertex',np.float32,
@@ -1322,8 +1355,8 @@ class subgridCalculatormain():
         # variables showing which elements and vertices are contained within
         # the subgrid area
                 
-        binaryElementListVariable = ncFile.createVariable('binaryElementList',np.int32,
-                                                                  ('numEle'))
+        # binaryElementListVariable = ncFile.createVariable('binaryElementList',np.int32,
+        #                                                           ('numEle'))
         binaryVertexListVariable = ncFile.createVariable('binaryVertexList',np.int32,
                                                                   ('numNode'))
         
@@ -1338,31 +1371,35 @@ class subgridCalculatormain():
         # vertex coefficient of friction level 1
         cmfVarVertex = ncFile.createVariable('cmfVertex',np.float32,
                                               ('numNode','numPhi'))
+        # vertex advection correction
+        cadvVarVertex = ncFile.createVariable('cadvVertex',np.float32,
+                                              ('numNode','numPhi'))
         
-        # elemental advection correction
-        cadvVar = ncFile.createVariable('cadv',np.float32,
-                                        ('numPhi','numVert','numEle'))
+        # # elemental advection correction
+        # cadvVar = ncFile.createVariable('cadv',np.float32,
+        #                                 ('numPhi','numVert','numEle'))
         
         
         phiSet[:] = desiredPhiList
         wetFractionDepthVarVertex[:,:] = depthsVertForLookup
-        wetFractionVarDepths[:,:,:] = depthsEleForLookup
-        areaVar[:,:] = area
-        totWatDepthVar[:,:,:] = HEleForLookup
+        # wetFractionVarDepths[:,:,:] = depthsEleForLookup
+        # areaVar[:,:] = area
+        # totWatDepthVar[:,:,:] = HEleForLookup
         # surfaceElevationsVar[:] = surfaceElevations
-        minSurfElevVar[:] = minSurfElev
-        maxSurfElevVar[:] = maxSurfElev
+        # minSurfElevVar[:] = minSurfElev
+        # maxSurfElevVar[:] = maxSurfElev
         wetTotWatDepthVarVertex[:,:] = HWVertForLookup
         gridTotWatDepthVarVertex[:,:] = HGVertForLookup
         cfVarVertex[:,:] = cfVertForLookup
-        binaryElementListVariable[:] = binaryElementList
+        # binaryElementListVariable[:] = binaryElementList
         binaryVertexListVariable[:] = binaryVertexList
         # do not use this in calculations anymore JLW 01302024
         # add max elevation cal
         # maxElevationEleVariable[:] = maxElevationEle
         # maxElevationVertexVariable[:] = maxElevationVertex
         cmfVarVertex[:,:] = cmfVertForLookup
-        cadvVar[:,:,:] = cadvForLookup
+        cadvVarVertex[:,:] = cadvVertForLookup
+        # cadvVar[:,:,:] = cadvForLookup
         
         ncFile.close()
         
