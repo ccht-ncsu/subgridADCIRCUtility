@@ -11,7 +11,7 @@ Based on the code written by jlwoodr3
 import numpy as np
 #import cupy as cp
 import geopandas as gpd
-from shapely.geometry import Point
+from shapely.geometry import Point, Polygon
 
 class Control:
     """Class to store info in control file"""
@@ -189,6 +189,16 @@ class SubgridCalculatorDGP0():
         self.mesh.loaded = True
 
         self.createEdgeList()
+
+        return
+
+    ############ CALCULATE AREA OF A TRIANGLE #######################################
+    def build_gpd_elem_triangles(self):
+        polys = [Polygon(zip(self.mesh.coord.Longitude[tri],self.mesh.coord.Latitude[tri])) for tri in self.mesh.tri]
+        gdf = gpd.GeoDataFrame(index=list(range(len(polys))), crs='epsg:4326', geometry=polys)
+        self.mesh.gpd_elem_triangles = gdf
+
+        return
 
     ############ CALCULATE AREA OF A TRIANGLE #######################################
     
@@ -1734,7 +1744,7 @@ class SubgridCalculatorDGP0():
             y = np.asarray(self.mesh.coord['Latitude'])[t]
             p = np.concatenate((x[:,np.newaxis],y[:,np.newaxis]), axis=1)
 
-            polygon = Polygon(p, True)
+            polygon = Polygon(p, closed=False)
             patches.append(polygon)
 
         def plotSingle(self,patches,ve,title,figfile):
