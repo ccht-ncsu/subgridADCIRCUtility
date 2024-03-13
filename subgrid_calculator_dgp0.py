@@ -6,12 +6,20 @@ Based on the code written by jlwoodr3
 @author: shinbunya
 """
 
+import sys
 #from turtle import end_fill
 #from zmq import curve_keypair
 import numpy as np
+import math
 #import cupy as cp
 import geopandas as gpd
-from shapely.geometry import Point, Polygon
+import geowombat as gw
+from multiprocessing import Pool, Process, SimpleQueue
+from functools import partial
+from shapely.geometry import Point, Polygon, LineString
+import time
+
+global queue
 
 class Control:
     """Class to store info in control file"""
@@ -66,6 +74,8 @@ class SubgridCalculatorDGP0():
 
         if subgridControlFilename != None:
             self.readSubgridControlFile(subgridControlFilename)
+
+        self.minimum_pixels_per_elem = 10
 
     ######################## Function to read subgrid control file ###################
     
@@ -191,13 +201,77 @@ class SubgridCalculatorDGP0():
         self.createEdgeList()
 
         return
+    
+    ############ Set convertion table from land cover to Manning's n ###########
+    def setLandCoverToManning(self, landCoverToManning):
+        if type(landCoverToManning) == str:
+            if landCoverToManning == 'NLCD':
+                landCoverToManning = {0:0.02, 11:0.02, 12:0.01, 21:0.02, 22:0.05, 23:0.1,
+                                        24:0.15, 31:0.09, 32:0.04, 41:0.1, 42:0.11, 43:0.1,
+                                        51:0.04, 52:0.05, 71:0.034, 72:0.03, 73:0.027, 74:0.025,
+                                        81:0.033, 82:0.037, 90:0.1, 91:0.1, 92:0.048, 93:0.1,
+                                        94:0.048, 95:0.045, 96:0.045, 97:0.045, 98:0.015,
+                                        99:0.015, 127:0.02}
+            elif landCoverToManning== 'C-CAP':
+                landCoverToManning = {0:0.02, 2:0.15, 3:0.10, 4:0.05, 5:0.02,
+                                        6:0.037, 7:0.033, 8:0.034, 9:0.1, 10:0.11,
+                                        11:0.1, 12:0.05, 13:0.1, 14:0.048, 15:0.045,
+                                        16:0.1, 17:0.048, 18:0.045, 19:0.04,
+                                        20:0.09, 21:0.02, 22:0.015, 23:0.015,
+                                        25:0.01}
+            else:
+                raise Exception("landCoverToManning type should be 'NLCD' or 'C-CAP'")
+             
+        self.landCoverToManning = landCoverToManning
+        self.landCoverValues = self.landCoverToManning.keys()
 
-    ############ CALCULATE AREA OF A TRIANGLE #######################################
+        return
+    
+    ############ BUILD ELEMENT TRIANGLES #######################################
     def build_gpd_elem_triangles(self):
         polys = [Polygon(zip(self.mesh.coord.Longitude[tri],self.mesh.coord.Latitude[tri])) for tri in self.mesh.tri]
         gdf = gpd.GeoDataFrame(index=list(range(len(polys))), crs='epsg:4326', geometry=polys)
         self.mesh.gpd_elem_triangles = gdf
+        cent = LineString(self.mesh.gpd_elem_triangles.centroid).centroid
+        lat_0 = cent.coords[0][1]
+        lon_0 = cent.coords[0][0]
+        crs = "+proj=laea +lat_0={} +lon_0={}".format(lat_0,lon_0)
+        trigs = self.mesh.gpd_elem_triangles.to_crs(crs)
+        self.mesh.gpd_elem_triangles["area"] = trigs['geometry'].area
+        return
 
+    def build_gpd_edge_lines(self):
+        edges = [LineString(zip(self.mesh.coord.Longitude[edg],self.mesh.coord.Latitude[edg])) for edg in self.mesh.ed2nd]
+        gdf = gpd.GeoDataFrame(index=list(range(len(edges))), crs='epsg:4326', geometry=edges)
+        self.mesh.gpd_edge_lines = gdf
+        cent = LineString(self.mesh.gpd_edge_lines.centroid).centroid
+        lat_0 = cent.coords[0][1]
+        lon_0 = cent.coords[0][0]
+        crs = "+proj=laea +lat_0={} +lon_0={}".format(lat_0,lon_0)
+        lines_cart = self.mesh.gpd_edge_lines.to_crs(crs)
+        self.mesh.gpd_edge_lines["length"] = lines_cart['geometry'].length
+
+        def gen_edge_poly(xys):
+            x0 = xys[0][0]
+            x1 = xys[1][0]
+            y0 = xys[0][1]
+            y1 = xys[1][1]
+            dx = x0 - x1
+            dy = y0 - y1
+            dl = math.sqrt(dx**2 + dy**2)
+            w2 = self.edge_width_m * 0.5
+            nx = -dy * w2 / dl
+            ny = dx * w2 / dl
+            xs = [x0 + nx, x1 + nx, x1 - nx, x0 - nx]
+            ys = [y0 + ny, y1 + ny, y1 - ny, y0 - ny]
+            poly = Polygon(zip(xs, ys))
+            return poly
+
+        polys = [gen_edge_poly(geom.coords) for geom in lines_cart.geometry]
+
+        self.mesh.gpd_edge_polygons = \
+            gpd.GeoDataFrame(index=list(range(len(polys))),
+                            crs=crs, geometry=polys).to_crs('epsg:4326')
         return
 
     ############ CALCULATE AREA OF A TRIANGLE #######################################
@@ -211,8 +285,6 @@ class SubgridCalculatorDGP0():
     ############ CALCULATE LENGTH OF A LINE SEGMENT #######################################
     
     def seglength(x1,y1,x2,y2):
-        import math
-
         length = math.sqrt((x1-x2)*(x1-x2)+(y1-y2)*(y1-y2))
     
         return length
@@ -237,8 +309,6 @@ class SubgridCalculatorDGP0():
     ############## CHECK IF A DEM CELL IS ALONG A LINE SEGMENT ##################
     
     def isAlong(x1,y1,x2,y2,x,y,xDEMRes,yDEMRes):
-        import math
-        import sys
         from subgrid_calculator_dgp0 import SubgridCalculatorDGP0 as scm
 
         dbuf = 1e-8
@@ -597,11 +667,11 @@ class SubgridCalculatorDGP0():
         self.mesh.ed2el = nedel
         self.mesh.numEdg = nedges
 
+
     ########## CALCULATE ELEMENT SUBGRID CORRECTION FOR VECTORIZED STORAGE ##########
 
     def calculateElementLookupTableForVectorizedStorage(self):
         import sys
-        import math
         import numpy as np
         import numpy as cp
         # import matplotlib.pyplot as plt
@@ -1187,11 +1257,309 @@ class SubgridCalculatorDGP0():
             self.subgridvectorized.cmf = cmf
         self.subgridvectorized.loaded = True
         
+
+    ########## CALCULATE ELEMENT SUBGRID CORRECTION FOR VECTORIZED STORAGE ##########
+    #########  USING GEOWOMBAT ######################################################
+        
+    def generate_table_for_element_chunk( \
+        tif_dem, tif_lan, gpd_elem_triangles, \
+        minimum_pixels_per_elem, landCoverToManning, surfElevIncrement, \
+        watDepthAboveHighestGroundIncrement, maxWatDepthAboveHighestGround, \
+        level0andLevel1, cf_lower_lim, \
+        target_elems_chunk):
+
+        nelems = len(target_elems_chunk)
+
+        ret = [None] * nelems
+
+        for iele, ele in enumerate(target_elems_chunk):
+            # startTime = time.perf_counter()
+
+            ele_gpd = gpd_elem_triangles.iloc[ele:ele+1]
+
+            try:
+                clipped_dem_xarray = tif_dem.gw.clip_by_polygon(ele_gpd, mask_data=True, expand_by=0)
+                clipped_dem = clipped_dem_xarray.to_numpy()
+            except Exception as e:
+                continue
+
+            clipped_lan = tif_lan.interp(x=clipped_dem_xarray.x, y=clipped_dem_xarray.y, method="nearest").to_numpy()
+            
+            if np.count_nonzero(~np.isnan(clipped_dem)) < minimum_pixels_per_elem or \
+            np.count_nonzero(~np.isnan(clipped_lan)) < minimum_pixels_per_elem:
+                continue
+
+            notnan = ~np.isnan(clipped_dem)
+            zCutGeoTiffMatrix2masked = clipped_dem[notnan]
+            nCutGeoTiffMatrix2masked = clipped_lan[notnan]
+
+            minElev = np.nanmin(zCutGeoTiffMatrix2masked)
+            maxElev = np.nanmax(zCutGeoTiffMatrix2masked)
+
+            # convert to Manning's n values
+            landCoverValues = landCoverToManning.keys()
+            for value in landCoverValues:
+                nCutGeoTiffMatrix2masked[nCutGeoTiffMatrix2masked == value] = landCoverToManning[value]
+            nCutGeoTiffMatrix2masked[nCutGeoTiffMatrix2masked >= 1.0] = 0.02     # set undefined values to 0.02
+            nCutGeoTiffMatrix2masked[nCutGeoTiffMatrix2masked <= 0.0] = 0.02     # set undefined values to 0.02
+
+            countIn_dem = np.count_nonzero(~np.isnan(clipped_dem))
+            countIn_lan = np.count_nonzero(~np.isnan(clipped_dem))
+
+            if countIn_dem == 0:
+                raise Exception('DEM resolution too coarse for element {}!'.format(ele))
+
+            if countIn_lan == 0:
+                raise Exception('Land cover resolution too coarse for element {}!'.format(ele))
+
+            surfElevIncrement = surfElevIncrement
+            minElevFloor = math.floor(minElev/surfElevIncrement)*surfElevIncrement
+            surfaceElevations = np.arange(minElevFloor,maxElev+surfElevIncrement,surfElevIncrement)
+            if len(surfaceElevations) < 2:
+                surfaceElevations = np.array([minElev,maxElev]).astype(np.float32)
+            else:
+                surfaceElevations[0] = minElev
+                surfaceElevations[-1] = maxElev
+            r1 = maxElev + watDepthAboveHighestGroundIncrement
+            r2 = r1 + maxWatDepthAboveHighestGround
+            surfaceElevations = np.append(surfaceElevations, np.arange(r1,r2))
+            num_SfcElevs = len(surfaceElevations)   # number of surface elevations we are running
+            surfaceElevations = np.asarray(surfaceElevations)
+            wetDryElementList = np.zeros(num_SfcElevs)   # for wet area fraction phi
+            totWatElementList = np.zeros(num_SfcElevs)   # for grid total water depth H_G
+            cfElementList = np.zeros(num_SfcElevs)       # for coefficient of friction cf
+            
+            if level0andLevel1:
+                # for Level 1 calculation
+                rvBottomTermList = np.zeros(num_SfcElevs)
+
+            # create a 3d surface array for use in calculations
+            tempSurfaceElevArray = np.ones((len(zCutGeoTiffMatrix2masked),
+                                                num_SfcElevs))*surfaceElevations
+
+            # create a 3d manning array for use in calculations            
+            tempManningArray = nCutGeoTiffMatrix2masked[:,np.newaxis]
+        
+            # subtract the bathymetry (2D Array) array from the surface 
+            # elevations (3D array) to get total water depths over the 
+            # element
+            tempTotWatDepthArray = tempSurfaceElevArray -  zCutGeoTiffMatrix2masked[:,np.newaxis]
+            
+            # find which of these cells are wet
+            # add some tiny minimum water depth so we dont have cells with
+            # like 10^-6 depths we will use 1 mm to start
+            tempWetDryList = tempTotWatDepthArray > 0.001
+            
+            # count how many cells are wet
+            wetDryElementList = np.count_nonzero(tempWetDryList,axis=0)
+
+            #################### CALCULATING TOTAL WATER DEPTH ############
+        
+            # 0 out any dry cells
+            tempTotWatDepthWetArray = tempTotWatDepthArray * tempWetDryList
+            
+            # integrate the wet total water depths for use in averaging later
+            totWatElementList = np.sum(tempTotWatDepthWetArray,axis=0)
+
+            #################### CALCULATING MANNINGS n ###################
+            # find the mannings for only wet areas then nan the rest for 
+            # use in calculations 
+            tempManningWetArray = tempManningArray * tempWetDryList
+
+            ########### CALCULATE GRID AVERAGED CF FOR MANNING ############
+            # calulate now for the element then sum later for use 
+            # in other calulations
+            tempcf = 9.81*tempManningWetArray**2/tempTotWatDepthWetArray**(1/3)
+            tempcf[np.where(np.array(tempcf < cf_lower_lim) | np.isnan(tempcf))] = cf_lower_lim
+            ###############################################################
+            
+            if level0andLevel1:
+                ############ NOW CALCULATE RV FROM KENNEDY ET AL 2019 #########
+                # integrate only now and then calculate full rv later
+                # rvBottomTermList += np.nansum(tempTotWatDepthWetArray**(3/2)*\
+                #     (tempcf)**(-1/2),axis = 0)
+                rvBottomTermList += np.nansum(tempTotWatDepthWetArray**(3/2)*\
+                    (tempcf)**(-1/2),axis = 0)
+
+            # finally sum and add cf for use in grid averaged calculation
+            # tempcf = np.nansum(tempcf,axis=0)
+            tempcf = np.nansum(tempcf,axis=0)
+            cfElementList += tempcf
+        
+            # Okay now we can finalize the values
+            wetAvgTotWatDepth = totWatElementList/wetDryElementList
+            gridAvgTotWatDepth = totWatElementList/countIn_dem
+            wetFractionTemp = wetDryElementList/countIn_dem
+            cfTemp = cfElementList/countIn_dem
+            if level0andLevel1:
+                rvBottomTermList[np.where(rvBottomTermList==0.0)] = np.nan
+                cmfTemp = (wetAvgTotWatDepth)*(wetAvgTotWatDepth/(rvBottomTermList/wetDryElementList))**2
+                cmfTemp[np.where(np.isnan(cmfTemp))] = 0.0
+
+            # store values
+            ret[iele] = [
+                surfaceElevations,
+                gridAvgTotWatDepth,
+                wetAvgTotWatDepth,
+                wetFractionTemp,
+                cfTemp,
+                cmfTemp,
+                minElev,
+                maxElev
+            ]
+
+        queue.put(len(target_elems_chunk))
+
+        return ret
+        
+    def calculateElementLookupTableForVectorizedStorageUsingGeoWombat(self):
+        numEle = self.mesh.numEle
+
+        # find if each element is within any of the given polygons
+        if hasattr(self.control, 'sgs_region_mask') and self.control.sgs_region_mask:
+            polys = gpd.read_file(self.control.sgs_region_mask).unary_union
+            elemInsidePolygon = self.mesh.gpd_elem_triangles.within(polys)
+        else:
+            elemInsidePolygon = np.ones(numEle).astype(bool)
+
+        # make an int array
+        binaryElementList = np.zeros(numEle).astype(int)
+                
+        if len(self.control.demFilenameList) != len(self.control.landcoverFilenameList):
+            raise Exception("# of DEM files must match # of land cover files.")
+
+        # Temporary list for storing return values
+        rets = [None] * numEle
+
+        # Main loops
+        for ifile in range(len(self.control.demFilenameList)):
+            demFilename = self.control.demFilenameList[ifile]
+            lanFilename = self.control.landcoverFilenameList[ifile]
+            target_elems = np.where((binaryElementList == 0) & (elemInsidePolygon == True))[0]
+            # target_elems = [0]
+
+            max_count = len(target_elems)
+            chunk_size = self.mp_chunk_size
+            elems_per_task = min(chunk_size, math.floor(len(target_elems)/self.mp_ncores))
+            if elems_per_task == 0:
+                chunks = [list(target_elems)]
+            else:
+                chunks = [[target_elems[j] for j in range(i*elems_per_task,(i+1)*elems_per_task)] for i in range(math.floor(len(target_elems)/elems_per_task))]
+                if max(chunks[-1]) != len(target_elems)-1:
+                    i = math.floor(len(target_elems)/elems_per_task)
+                    chunks.append([target_elems[j] for j in range(i*elems_per_task,len(target_elems))])
+            print('chunks = ', chunks)
+            
+            with gw.open(demFilename) as tif_dem, gw.open(lanFilename) as tif_lan:
+                countElementLoop = 0
+                self.init_progressbar(max_count, "generating element lookup tables")
+                shared_queue = SimpleQueue()
+                pb_process = Process(target=self.show_progressbar, args=(max_count, "generating sgs tables", shared_queue))
+                pb_process.start()
+
+                with Pool(self.mp_ncores, initializer=SubgridCalculatorDGP0.init_worker, initargs=(shared_queue,)) as pool:
+                    cnt = 0
+                    for i, rets_chunk in enumerate(pool.imap(partial( \
+                        SubgridCalculatorDGP0.generate_table_for_element_chunk, 
+                        tif_dem, tif_lan, self.mesh.gpd_elem_triangles, 
+                        self.minimum_pixels_per_elem, self.landCoverToManning, self.surfElevIncrement, 
+                        self.watDepthAboveHighestGroundIncrement, self.maxWatDepthAboveHighestGround, 
+                        self.level0andLevel1, self.cf_lower_lim,
+                        ), chunks)):
+
+                        cnt += len(chunks[i])
+
+                        for index, ret in enumerate(rets_chunk):
+                            ele = chunks[i][index]
+                            rets[ele] = ret
+                            if ret:
+                                binaryElementList[ele] = 1
+                
+                shared_queue.put(-1)
+                pb_process.join()
+
+        # allocate the index that maps element to location in vector
+        elemIndex = np.zeros((numEle)).astype(int)
+        elemNumLevel = np.zeros((numEle)).astype(int)
+        elemIndexCnt = 0
+
+        # count number of levels
+        nlevels = 0
+        for ele in range(numEle):
+            ret = rets[ele]
+            if ret:
+                nlevels += len(ret[0])
+
+        # allocate arrays for subgrid quantities
+        surfElevs = np.zeros(nlevels,dtype=np.float32)
+        wetFraction = np.zeros(nlevels,dtype=np.float32)
+        area = np.zeros((numEle)).astype(np.float32)
+        totWatDepth = np.zeros(nlevels,dtype=np.float32)
+        wetTotWatDepth = np.zeros(nlevels,dtype=np.float32)
+        cf = np.zeros(nlevels,dtype=np.float32)
+        minElevationEle = np.zeros(numEle).astype(np.float32)           # find lowest elevation in each element for use in variable phi
+        maxElevationEle = np.zeros(numEle).astype(np.float32)           # find highest elevation in each element for use in variable phi
+        if self.level0andLevel1:
+            rv = np.zeros(nlevels,dtype=np.float32)
+            cmf = np.zeros(nlevels,dtype=np.float32)
+
+        # fill arrays
+        area[:] = -99999
+        minElevationEle[:] = 99999
+        maxElevationEle[:] = -99999
+
+        for ele in range(numEle):
+            ret = rets[ele]
+
+            if ret:
+                nse = len(ret[0])
+
+                ista = elemIndexCnt
+                iend = elemIndexCnt + nse
+                    
+                surfElevs[ista:iend] = ret[0]
+                totWatDepth[ista:iend] = ret[1]
+                wetTotWatDepth[ista:iend] = ret[2]
+                wetFraction[ista:iend] = ret[3]
+                cf[ista:iend] = ret[4]
+                if self.level0andLevel1:
+                    cmf[ista:iend] = ret[5]
+
+                elemIndex[ele] = elemIndexCnt
+                elemNumLevel[ele] = nse
+                elemIndexCnt = elemIndexCnt + nse
+        
+                minElevationEle[ele] = ret[6]
+                maxElevationEle[ele] = ret[7]
+
+                area[ele] = self.mesh.gpd_elem_triangles.loc[ele,"area"]   
+            else:
+                if ele > 0:
+                    elemIndex[ele] = elemIndex[ele-1] + elemNumLevel[ele-1]
+
+        # store the resulting values
+        self.subgridvectorized.elemIndex = elemIndex
+        self.subgridvectorized.surfaceElevations = surfElevs
+        self.subgridvectorized.wetFraction = wetFraction
+        self.subgridvectorized.area = area
+        self.subgridvectorized.totWatDepth = totWatDepth
+        self.subgridvectorized.binaryElementList = binaryElementList
+        self.subgridvectorized.minElevationEle = minElevationEle
+        self.subgridvectorized.maxElevationEle = maxElevationEle
+        self.subgridvectorized.minElevationGlobal = np.min(minElevationEle)
+        self.subgridvectorized.maxElevationGlobal = np.max(maxElevationEle)
+        self.subgridvectorized.cf = cf
+        if self.level0andLevel1:
+            self.subgridvectorized.cmf = cmf
+        self.subgridvectorized.loaded = True
+
+        return
+
+
     ########## CALCULATE EDGE SUBGRID CORRECTION FOR VECTORIZED STORAGE ##########
 
     def calculateEdgeLookupTableForVectorizedStorage(self):
         import sys
-        import math
         import numpy as np
         import numpy as cp
         import time
@@ -1349,7 +1717,6 @@ class SubgridCalculatorDGP0():
         length = np.zeros((numEdg)).astype(np.float32)
         totWatDepth = np.array([],dtype=np.float32)
         wetTotWatDepth = np.array([],dtype=np.float32)
-        cf = np.array([],dtype=np.float32)
         minElevationEdg = np.zeros(numEdg).astype(np.float32)    # lowest elevation in each edge for use in variable phi
         maxElevationEdg = np.zeros(numEdg).astype(np.float32)    # highest elevation in each edge for use in variable phi
 
@@ -1613,6 +1980,234 @@ class SubgridCalculatorDGP0():
         self.subgridvectorized.maxElevationGlobal = maxElevationGlobal
         self.subgridvectorized.loadedEdg = True
         
+    
+    ########## CALCULATE EDGE SUBGRID CORRECTION FOR VECTORIZED STORAGE ##########
+    ########## USING GEOWOMBAT ###################################################
+
+    def generate_table_for_edge_chunk( \
+        tif_dem, gpd_edge_polygons, \
+        minimum_pixels_per_edge, surfElevIncrement, \
+        watDepthAboveHighestGroundIncrement, maxWatDepthAboveHighestGround, \
+        target_edges_chunk):
+
+        nedges = len(target_edges_chunk)
+
+        ret = [None] * nedges
+
+        for iedg, edg in enumerate(target_edges_chunk):
+            # startTime = time.perf_counter()
+            edg_gpd = gpd_edge_polygons.iloc[edg:edg+1]
+
+            try:
+                clipped_dem = tif_dem.gw.clip_by_polygon(edg_gpd, mask_data=True, expand_by=0).to_numpy()
+            except Exception as e:
+                continue
+
+            if np.count_nonzero(~np.isnan(clipped_dem)) < minimum_pixels_per_edge:
+                continue
+
+            notnan = ~np.isnan(clipped_dem)
+            zCutGeoTiffMatrix2masked = clipped_dem[notnan]
+
+            minElev = np.nanmin(zCutGeoTiffMatrix2masked)
+            maxElev = np.nanmax(zCutGeoTiffMatrix2masked)
+
+            countIn_dem = np.count_nonzero(~np.isnan(clipped_dem))
+
+            if countIn_dem == 0:
+                raise Exception('DEM resolution too coarse for element {}!'.format(ele))
+
+            surfElevIncrement = surfElevIncrement
+            minElevFloor = math.floor(minElev/surfElevIncrement)*surfElevIncrement
+            surfaceElevations = np.arange(minElevFloor,maxElev+surfElevIncrement,surfElevIncrement)
+            if len(surfaceElevations) < 2:
+                surfaceElevations = np.array([minElev,maxElev]).astype(np.float32)
+            else:
+                surfaceElevations[0] = minElev
+                surfaceElevations[-1] = maxElev
+            r1 = maxElev + watDepthAboveHighestGroundIncrement
+            r2 = r1 + maxWatDepthAboveHighestGround
+            surfaceElevations = np.append(surfaceElevations, np.arange(r1,r2))
+            num_SfcElevs = len(surfaceElevations)   # number of surface elevations we are running
+            surfaceElevations = np.asarray(surfaceElevations)
+            wetDryElementList = np.zeros(num_SfcElevs)   # for wet area fraction phi
+            totWatElementList = np.zeros(num_SfcElevs)   # for grid total water depth H_G
+            
+            # create a 3d surface array for use in calculations
+            tempSurfaceElevArray = np.ones((len(zCutGeoTiffMatrix2masked),
+                                                num_SfcElevs))*surfaceElevations
+
+            # subtract the bathymetry (2D Array) array from the surface 
+            # elevations (3D array) to get total water depths over the 
+            # element
+            tempTotWatDepthArray = tempSurfaceElevArray -  zCutGeoTiffMatrix2masked[:,np.newaxis]
+            
+            # find which of these cells are wet
+            # add some tiny minimum water depth so we dont have cells with
+            # like 10^-6 depths we will use 1 mm to start
+            tempWetDryList = tempTotWatDepthArray > 0.001
+            
+            # count how many cells are wet
+            wetDryElementList = np.count_nonzero(tempWetDryList,axis=0)
+
+            #################### CALCULATING TOTAL WATER DEPTH ############
+        
+            # 0 out any dry cells
+            tempTotWatDepthWetArray = tempTotWatDepthArray * tempWetDryList
+            
+            # integrate the wet total water depths for use in averaging later
+            totWatElementList = np.sum(tempTotWatDepthWetArray,axis=0)
+
+            # Okay now we can finalize the values
+            wetAvgTotWatDepth = totWatElementList/wetDryElementList
+            gridAvgTotWatDepth = totWatElementList/countIn_dem
+            wetFractionTemp = wetDryElementList/countIn_dem
+
+            # store values
+            ret[iedg] = [
+                surfaceElevations,
+                gridAvgTotWatDepth,
+                wetAvgTotWatDepth,
+                wetFractionTemp,
+                minElev,
+                maxElev
+            ]
+            
+        queue.put(len(target_edges_chunk))
+
+        return ret
+
+    def calculateEdgeLookupTableForVectorizedStorageUsingGeoWombat(self):
+        numEdg = self.mesh.numEdg
+
+        # find if each element is within any of the given polygons
+        if hasattr(self.control, 'sgs_region_mask') and self.control.sgs_region_mask:
+            polys = gpd.read_file(self.control.sgs_region_mask).unary_union
+            edgeInsidePolygon = self.mesh.gpd_edge_lines.within(polys)
+        else:
+            edgeInsidePolygon = np.ones(numEdg).astype(bool)
+
+        # make an int array
+        binaryEdgList = np.zeros(numEdg).astype(int)
+                
+        if len(self.control.demFilenameList) != len(self.control.landcoverFilenameList):
+            raise Exception("# of DEM files must match # of land cover files.")
+
+        # Temporary list for storing return values
+        rets = [None] * numEdg
+
+        # Main loops
+        for ifile in range(len(self.control.demFilenameList)):
+            demFilename = self.control.demFilenameList[ifile]
+            target_edges = np.where((binaryEdgList == 0) & (edgeInsidePolygon == True))[0]
+            # target_edges = [56]
+            
+            max_count = len(target_edges)
+            chunk_size = self.mp_chunk_size
+            edges_per_task = min(chunk_size, math.floor(len(target_edges)/self.mp_ncores))
+            if edges_per_task == 0:
+                chunks = [list(target_edges)]
+            else:
+                chunks = [[target_edges[j] for j in range(i*edges_per_task,(i+1)*edges_per_task)] for i in range(math.floor(len(target_edges)/edges_per_task))]
+                if max(chunks[-1]) != len(target_edges)-1:
+                    i = math.floor(len(target_edges)/edges_per_task)
+                    chunks.append([target_edges[j] for j in range(i*edges_per_task,len(target_edges))])
+            print('chunks = ', chunks)
+            
+            with gw.open(demFilename) as tif_dem:
+                countElementLoop = 0
+                self.init_progressbar(max_count, "generating edge lookup tables")
+                shared_queue = SimpleQueue()
+                pb_process = Process(target=self.show_progressbar, args=(max_count, "generating sgs tables", shared_queue))
+                pb_process.start()
+
+                with Pool(self.mp_ncores, initializer=SubgridCalculatorDGP0.init_worker, initargs=(shared_queue,)) as pool:
+                    cnt = 0
+                    for i, rets_chunk in enumerate(pool.imap(partial( \
+                        SubgridCalculatorDGP0.generate_table_for_edge_chunk,
+                        tif_dem, self.mesh.gpd_edge_polygons,
+                        self.minimum_pixels_per_edge, self.surfElevIncrement,
+                        self.watDepthAboveHighestGroundIncrement, self.maxWatDepthAboveHighestGround,
+                        ), chunks)):
+
+                        cnt += len(chunks[i])
+
+                        for index, ret in enumerate(rets_chunk):
+                            edg = chunks[i][index]
+                            rets[edg] = ret
+                            if ret:
+                                binaryEdgList[edg] = 1
+                
+                shared_queue.put(-1)
+                pb_process.join()
+
+        # allocate the index that maps element to location in vector
+        edgIndex = np.zeros((numEdg)).astype(int)
+        edgNumLevel = np.zeros((numEdg)).astype(int)
+        edgIndexCnt = 0
+
+        # count number of levels
+        nlevels = 0
+        for edg in range(numEdg):
+            ret = rets[edg]
+            if ret:
+                nlevels += len(ret[0])
+        
+        # allocate arrays for subgrid quantities
+        surfElevs = np.zeros(nlevels,dtype=np.float32)
+        wetFraction = np.zeros(nlevels,dtype=np.float32)
+        length = np.zeros((numEdg)).astype(np.float32)
+        totWatDepth = np.zeros(nlevels,dtype=np.float32)
+        wetTotWatDepth = np.zeros(nlevels,dtype=np.float32)
+        minElevationEdg = np.zeros(numEdg).astype(np.float32)           # find lowest elevation in each element for use in variable phi
+        maxElevationEdg = np.zeros(numEdg).astype(np.float32)           # find highest elevation in each element for use in variable phi
+
+        # fill arrays
+        length[:] = -99999
+        minElevationEdg[:] = 99999
+        maxElevationEdg[:] = -99999
+
+        for edg in range(numEdg):
+            ret = rets[edg]
+            
+            if ret:
+                nse = len(ret[0])
+
+                ista = edgIndexCnt
+                iend = edgIndexCnt + nse
+                    
+                surfElevs[ista:iend] = ret[0]
+                totWatDepth[ista:iend] = ret[1]
+                wetTotWatDepth[ista:iend] = ret[2]
+                wetFraction[ista:iend] = ret[3]
+
+                edgIndex[edg] = edgIndexCnt
+                edgNumLevel[edg] = nse
+                edgIndexCnt = edgIndexCnt + nse
+
+                minElevationEdg[edg] = ret[4]
+                maxElevationEdg[edg] = ret[5]
+
+                length[edg] = self.mesh.gpd_edge_lines.loc[edg,"length"]
+            else:
+                if edg > 0:
+                    edgIndex[edg] = edgIndex[edg-1] + edgNumLevel[edg-1]
+        
+        # store the resulting values
+        self.subgridvectorized.edgIndex = edgIndex
+        self.subgridvectorized.surfaceElevationsEdg = surfElevs
+        self.subgridvectorized.wetFractionEdg = wetFraction
+        self.subgridvectorized.edglength = length
+        self.subgridvectorized.totWatDepthEdg = totWatDepth
+        self.subgridvectorized.binaryElementListEdg = binaryEdgList
+        self.subgridvectorized.minElevationEdg = minElevationEdg
+        self.subgridvectorized.maxElevationEdg = maxElevationEdg
+        self.subgridvectorized.minElevationGlobalEdg = np.min(minElevationEdg)
+        self.subgridvectorized.maxElevationGlobalEdg = np.max(maxElevationEdg)
+        self.subgridvectorized.loadedEdg = True
+
+        return
+
     ############## WRITE SUBGRID CORRECTION DATA TO NETCDF FOR VECTORIZED STORAGE ##############
 
     def writeSubgridLookupTableNetCDFForVectorizedStorage(self):
@@ -1726,16 +2321,18 @@ class SubgridCalculatorDGP0():
 
     def plot_subgrid_for_vectorizedstorage(self,imagePath):
         import numpy as np
+        import matplotlib.pyplot as plt
         from matplotlib.patches import Circle, Wedge, Polygon
         from matplotlib.collections import PatchCollection
         import matplotlib.pyplot as plt
+        import numpy as np
         import os
- 
+
         # Check whether the image path exists or not and create it if not
         isExist = os.path.exists(imagePath)
         if not isExist:
             os.makedirs(imagePath)
-   
+
         # create polygons
         patches = []
         for i in range(self.mesh.numEle):
@@ -1748,10 +2345,6 @@ class SubgridCalculatorDGP0():
             patches.append(polygon)
 
         def plotSingle(self,patches,ve,title,figfile):
-            import numpy as np
-            from matplotlib.patches import Circle, Wedge, Polygon
-            from matplotlib.collections import PatchCollection
-            import matplotlib.pyplot as plt
 
             p = PatchCollection(patches)
             p.set_array(ve)
@@ -1767,11 +2360,7 @@ class SubgridCalculatorDGP0():
             fig.savefig("{:s}/sg_{:s}.png".format(imagePath,figfile),dpi=600,facecolor='white',edgecolor='none')
             plt.close()
 
-        def plotMulti(self,patches,numEle,elemIndex,surfaceElevs,minElevationEle,maxElevationEle,ve,surfElevForPlot,title,figfile):
-            import numpy as np
-            from matplotlib.patches import Circle, Wedge, Polygon
-            from matplotlib.collections import PatchCollection
-            import matplotlib.pyplot as plt
+        def plotMulti(self,patches,numEle,elemIndex,surfaceElevs,minElevationEle,maxElevationEle,ve,surfElevForPlot,clim,title,figfile):
 
             def interpAt(elemIndex,surfaceElevs,minElevationEle,maxElevationEle,ve,se):
                 import sys
@@ -1815,13 +2404,23 @@ class SubgridCalculatorDGP0():
             for i in range(0,len(surfElevForPlot)):
                 se = surfElevForPlot[i] 
                 vinterp = interpAt(elemIndex,surfaceElevs,minElevationEle,maxElevationEle,ve,se)
-
+                
                 p = PatchCollection(patches)
                 p.set_array(vinterp)
+                p.set_clim(clim)
 
                 fig, ax = plt.subplots()
                 ax.add_collection(p)
                 fig.colorbar(p, ax=ax)
+
+                # for j in range(len(patches)):
+                #     xy = patches[j].get_xy()
+                #     xs = [xy[jj][0] for jj in range(len(xy))]
+                #     ys = [xy[jj][1] for jj in range(len(xy))]
+                #     x = np.mean(xs)
+                #     y = np.mean(ys)
+                #     ax.text(x, y, '{:d}'.format(j+1), fontsize=5)
+                
                 plt.xlim([min(self.mesh.coord['Longitude']), max(self.mesh.coord['Longitude'])])
                 plt.ylim([min(self.mesh.coord['Latitude']), max(self.mesh.coord['Latitude'])])
                 plt.title("{:s} at Elevation {:.1f}".format(title,se))
@@ -1830,7 +2429,7 @@ class SubgridCalculatorDGP0():
                 fig.savefig("{:s}/sg_{:s}_{:03d}.png".format(imagePath,figfile,i),dpi=600,facecolor='white',edgecolor='none')
                 plt.close()
 
-        surfElevForPlot = np.arange(-20.0,0.0,4.0)
+        surfElevForPlot = np.arange(-20.0,4.0,4.0)
 
         # mesh z
         vn = np.asarray(self.mesh.coord['Elevation'])
@@ -1840,17 +2439,22 @@ class SubgridCalculatorDGP0():
         # area
         plotSingle(self,patches,self.subgridvectorized.area,"Elemental Area","area")
 
+        # # binaryList & binaryEdgList
+        # vn = np.asarray(self.mesh.coord['Elevation'])
+        # ve = np.mean(vn[self.mesh.tri],axis=1)
+        # plotSingle(self,patches,ve,"Elemental Elevation","elevation")
+
         # wetFraction
         plotMulti(self,patches,self.mesh.numEle,self.subgridvectorized.elemIndex,
-                  self.subgridvectorized.surfaceElevations,
-                  self.subgridvectorized.minElevationEle, self.subgridvectorized.maxElevationEle,
-                  self.subgridvectorized.wetFraction,surfElevForPlot,"Elemental Wet Fraction","wetfraction")
+                    self.subgridvectorized.surfaceElevations,
+                    self.subgridvectorized.minElevationEle, self.subgridvectorized.maxElevationEle,
+                    self.subgridvectorized.wetFraction,surfElevForPlot,[0,1.0],"Elemental Wet Fraction","wetfraction")
 
         # totWatDepth
         plotMulti(self,patches,self.mesh.numEle,self.subgridvectorized.elemIndex,
-                  self.subgridvectorized.surfaceElevations,
-                  self.subgridvectorized.minElevationEle, self.subgridvectorized.maxElevationEle,
-                  self.subgridvectorized.totWatDepth,surfElevForPlot,"Elemental Total Water Depth","totwatdepth")
+                    self.subgridvectorized.surfaceElevations,
+                    self.subgridvectorized.minElevationEle, self.subgridvectorized.maxElevationEle,
+                    self.subgridvectorized.totWatDepth,surfElevForPlot,[0,10],"Elemental Total Water Depth","totwatdepth")
 
         # binaryElementList
         plotSingle(self,patches,self.subgridvectorized.binaryElementList,"Binary Element List","binaryelemlist")
@@ -1863,15 +2467,60 @@ class SubgridCalculatorDGP0():
 
         # cf
         plotMulti(self,patches,self.mesh.numEle,self.subgridvectorized.elemIndex,
-                  self.subgridvectorized.surfaceElevations,
-                  self.subgridvectorized.minElevationEle, self.subgridvectorized.maxElevationEle,
-                  self.subgridvectorized.cf,surfElevForPlot,"Elemental Cf","cf")
+                    self.subgridvectorized.surfaceElevations,
+                    self.subgridvectorized.minElevationEle, self.subgridvectorized.maxElevationEle,
+                    self.subgridvectorized.cf,surfElevForPlot,[0,0.01],"Elemental Cf","cf")
 
         # cmf
         if self.level0andLevel1:
             plotMulti(self,patches,self.mesh.numEle,self.subgridvectorized.elemIndex,
                     self.subgridvectorized.surfaceElevations,
                     self.subgridvectorized.minElevationEle, self.subgridvectorized.maxElevationEle,
-                    self.subgridvectorized.cmf,surfElevForPlot,"Elemental CMf","cmf")
+                    self.subgridvectorized.cmf,surfElevForPlot,[0,0.04],"Elemental CMf","cmf")
 
+    #######################################################################
+    # Section for parallel computing
+    def init_progressbar(self, max_count, header):
+        self.max_count = max_count
+        self.time_start = time.time()
+        # self.wProgress = IntProgress(min=0, max=max_count)
+        # self.wLabel = Label()
+        self.header = header
+        # wVBox = VBox([self.wProgress, self.wLabel])
 
+    def show_progress(self, i):
+        percentage_done = max(1e-8, float(i)/float(self.max_count)*100.0)
+        elapsed_time = time.time() - self.time_start
+        elapsed_unit = 'sec'
+        estimated_total_time = elapsed_time / (percentage_done/100.0)
+        estimated_total_unit = 'sec'
+        remaining_time = elapsed_time * (1/(percentage_done/100.0) - 1.0)
+        remaining_unit = 'sec'
+        if elapsed_time > 600:
+            elapsed_time /= 60
+            elapsed_unit = 'min'
+        if estimated_total_time > 600:
+            estimated_total_time /= 60
+            estimated_total_unit = 'min'
+        if remaining_time > 600:
+            remaining_time /= 60
+            remaining_unit = 'min'
+        # self.wProgress.value = i
+        msg = '{}: {:.2f}% done. elapsed time = {:.0f} {}. estimated remaining time = {:.0f} {}. estimated total time = {:.0f} {}.'.format(\
+            self.header, percentage_done, elapsed_time, elapsed_unit, remaining_time, remaining_unit, estimated_total_time, estimated_total_unit)
+        # self.wLabel.value = msg 
+        print(msg)
+
+    def show_progressbar(self, max_count, description, queue):
+        sum = 0
+        while True:
+            item = queue.get()
+            if item < 0:
+                break
+            sum += item
+            self.show_progress(sum)
+
+    def init_worker(shared_queue):
+        global queue
+        queue = shared_queue
+    #######################################################################
