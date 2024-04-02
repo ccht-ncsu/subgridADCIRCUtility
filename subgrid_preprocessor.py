@@ -1690,7 +1690,7 @@ class subgridCalculatormain():
                     # now set tot water depth of dry cells to nan
                             
                     temptotWatDepth[temptotWatDepth < 0.0001] = np.nan
-            
+
                     # add to wet frac array
                             
                     tempwetFractionData[k,:] = wetCellsInSubAreaCount/cellsInSubElement
