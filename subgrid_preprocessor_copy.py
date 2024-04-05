@@ -1496,11 +1496,29 @@ class subgridCalculatormain():
         # end = time.time()
         # print('This took {} s'.format(end-start))
         # start = time.time()
+        # now look at old method 
+        # vertex connectivity 
+        # vertexConnectOld = np.zeros((numNode,maxConnectedVertex)).astype(int)
+        # nodeList = [627355, 627356, 635086]
+        # for node in nodeList:
+        #     # start1 = time.time()
+        #     connectedElements = np.where(meshConnectivity==node)[0]
+        #     vertexConnectOld[node,:len(connectedElements)] = connectedElements
+        #     # end1 = time.time()
+        #     # print('Finished {} percent took {}'.format((i/numNode)*100,end1-start1))
+        # # end = time.time()
+        # # print('Old method took {} s'.format(end-start))
+
+        # return vertexConnect, vertexConnectOld, countArray
+        # start = time.time()
         # fill this vertex Data Array
         for i in range(numNode):
             # find connected elements (this is the slowest part)
             # connectedElements = np.where(meshConnectivity==i)[0]
-            connectedElements = vertexConnect[i,:][vertexConnect[i,:]!=0]
+            # connectedElements = vertexConnect[i,:][vertexConnect[i,:]!=0] 
+            # the line above doesn't work since one of the elements is infact 0
+            # replace with the following
+            connectedElements = vertexConnect[i,:countArray[i]]
             # fill in vertex data
             for j in range(len(connectedElements)):
             # for j in range(len(connectedElements)):
