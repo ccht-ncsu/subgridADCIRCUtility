@@ -1471,11 +1471,34 @@ class subgridCalculatormain():
         # 8 is used because each sub area will have 4 vertices so listing lon then lat
         vertexData = np.empty((numNode,maxConnectedVertex,8))
         vertexData[:,:,:] = np.nan
+        # vertex connectivity 
+        vertexConnect = np.zeros((numNode,maxConnectedVertex)).astype(int)
+        # keep track of how many connected elements 
+        countArray = np.zeros(numNode).astype(int)
+        # loop through vertices to get connected elements
+        
+        for i in range(numEle):
+            # find connected elements
+            nm0 = meshConnectivity[i,0]
+            nm1 = meshConnectivity[i,1]
+            nm2 = meshConnectivity[i,2]
+            # fill in connectivity
+            vertexConnect[nm0,countArray[nm0]] = i
+            vertexConnect[nm1,countArray[nm1]] = i
+            vertexConnect[nm2,countArray[nm2]] = i
+            # fill count array
+            countArray[nm0]+=1
+            countArray[nm1]+=1
+            countArray[nm2]+=1
 
         # fill this vertex Data Array
         for i in range(numNode):
             # find connected elements (this is the slowest part)
-            connectedElements = np.where(meshConnectivity==i)[0]
+            # connectedElements = np.where(meshConnectivity==i)[0]
+            # connectedElements = vertexConnect[i,:][vertexConnect[i,:]!=0] 
+            # the line above doesn't work since one of the elements is infact 0
+            # replace with the following
+            connectedElements = vertexConnect[i,:countArray[i]]
             # fill in vertex data
             for j in range(len(connectedElements)):
                 # get vertices of subelement
