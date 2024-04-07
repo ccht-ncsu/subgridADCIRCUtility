@@ -1598,7 +1598,8 @@ class subgridCalculatormain():
             for j in range(len(idxAllWithin)):
                 start = time.time()
                 # find how many connected elements
-                conElementCount = np.count_nonzero(~np.isnan(vertexData[idxAllWithin[j],:,0])) 
+                # conElementCount = np.count_nonzero(~np.isnan(vertexData[idxAllWithin[j],:,0])) 
+                conElementCount = countArray[idxAllWithin[j]]
                 # create array to hold vertex area data 
                 vertexSubArea = np.zeros((conElementCount,1))
                 # temporarily allocate for each subarea variable
@@ -1750,6 +1751,8 @@ class subgridCalculatormain():
                     # set nan values to cf calculated from mean mannings n and 8 cm of water
                     tempcfData[k,np.isnan(tempcfData[k,:])] = 9.81*np.mean(manningsnCutNoNaN)**2/(0.08**(1/3))
                     tempcmfData[k,np.isnan(tempcmfData[k,:])] = 9.81*np.mean(manningsnCutNoNaN)**2/(0.08**(1/3))
+                    if(np.any(np.isnan(tempcfData[k,:]))):
+                        return idxAllWithin[j],k,tempcfData,manningsnCutNoNaN
                     # set advection correction equal to 1.0
                     tempcadvData[k,np.isnan(tempcadvData[k,:])] = 1.0
                 
@@ -1773,7 +1776,6 @@ class subgridCalculatormain():
         # total time
         endTotal = time.time()
         print('All calulations took {} s'.format(endTotal-startTotal))
-
 
         # now I need to condense the lookup tables to only have 11 values corresponding to phi=0 to phi=1
         start = time.time() 
