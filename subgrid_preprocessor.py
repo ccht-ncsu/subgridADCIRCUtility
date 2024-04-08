@@ -1550,7 +1550,8 @@ class subgridCalculatormain():
         vertexUseList = np.ones(numNode,dtype=bool)
         # keep track of total calc time
         startTotal = time.time()
-        for i in range(len(demFilenameList)):
+        # for i in range(len(demFilenameList)):
+        for i in range(145,146):
             # reading in DEM again
             # all variables the same as before
             elevationData = subgridCalculatormain.importDEMv2(demFilenameList[i])
@@ -1690,10 +1691,12 @@ class subgridCalculatormain():
                     # get just he bathy topo inside the sub element 
                             
                     bathyTopoInsideSubElement = demBathyTopoCut*insideSubElement
+     
+                    # # set 0 values to nan for calculations
                             
-                    # set 0 values to nan for calculations
-                            
-                    bathyTopoInsideSubElement[bathyTopoInsideSubElement==0] = np.nan
+                    # bathyTopoInsideSubElement[bathyTopoInsideSubElement==0] = np.nan
+                    # JLW: fix this and set cells outside subelement to nan
+                    bathyTopoInsideSubElement[insideSubElement==False] = np.nan
                             
                     # get area of sub element
                     vertexSubArea[k] = tri0Area + tri1Area # used for area weighting later
@@ -1751,8 +1754,8 @@ class subgridCalculatormain():
                     # set nan values to cf calculated from mean mannings n and 8 cm of water
                     tempcfData[k,np.isnan(tempcfData[k,:])] = 9.81*np.mean(manningsnCutNoNaN)**2/(0.08**(1/3))
                     tempcmfData[k,np.isnan(tempcmfData[k,:])] = 9.81*np.mean(manningsnCutNoNaN)**2/(0.08**(1/3))
-                    if(np.any(np.isnan(tempcfData[k,:]))):
-                        return idxAllWithin[j],k,tempcfData,manningsnCutNoNaN
+                    # if(np.any(np.isnan(tempcfData[k,:]))):
+                    #     return idxAllWithin[j],k,tempcfData,manningsnCutNoNaN,manningsnCut,bathyTopoInsideSubElement, demBathyTopoCut, insideSubElement
                     # set advection correction equal to 1.0
                     tempcadvData[k,np.isnan(tempcadvData[k,:])] = 1.0
                 
