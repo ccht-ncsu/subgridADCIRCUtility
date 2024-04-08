@@ -1550,8 +1550,8 @@ class subgridCalculatormain():
         vertexUseList = np.ones(numNode,dtype=bool)
         # keep track of total calc time
         startTotal = time.time()
-        # for i in range(len(demFilenameList)):
-        for i in range(145,146):
+        
+        for i in range(len(demFilenameList)):
             # reading in DEM again
             # all variables the same as before
             elevationData = subgridCalculatormain.importDEMv2(demFilenameList[i])
@@ -1754,8 +1754,6 @@ class subgridCalculatormain():
                     # set nan values to cf calculated from mean mannings n and 8 cm of water
                     tempcfData[k,np.isnan(tempcfData[k,:])] = 9.81*np.mean(manningsnCutNoNaN)**2/(0.08**(1/3))
                     tempcmfData[k,np.isnan(tempcmfData[k,:])] = 9.81*np.mean(manningsnCutNoNaN)**2/(0.08**(1/3))
-                    # if(np.any(np.isnan(tempcfData[k,:]))):
-                    #     return idxAllWithin[j],k,tempcfData,manningsnCutNoNaN,manningsnCut,bathyTopoInsideSubElement, demBathyTopoCut, insideSubElement
                     # set advection correction equal to 1.0
                     tempcadvData[k,np.isnan(tempcadvData[k,:])] = 1.0
                 
