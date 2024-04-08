@@ -1690,23 +1690,28 @@ class subgridCalculatormain():
                             
                     # get just he bathy topo inside the sub element 
                             
-                    bathyTopoInsideSubElement = demBathyTopoCut*insideSubElement
+                    # bathyTopoInsideSubElement = demBathyTopoCut*insideSubElement
+                    # take out unnecessary calc
+                    bathyTopoInsideSubElement = demBathyTopoCut[insideSubElement==True]
      
                     # # set 0 values to nan for calculations
                             
                     # bathyTopoInsideSubElement[bathyTopoInsideSubElement==0] = np.nan
                     # JLW: fix this and set cells outside subelement to nan
-                    bathyTopoInsideSubElement[insideSubElement==False] = np.nan
+                    # bathyTopoInsideSubElement[insideSubElement==False] = np.nan
                             
                     # get area of sub element
                     vertexSubArea[k] = tri0Area + tri1Area # used for area weighting later
                     # remove cells not inside sub element which will flatten the array
-                    bathyTopoInsideSubElementNoNaN = bathyTopoInsideSubElement[~np.isnan(bathyTopoInsideSubElement)]
-                    manningsnCutNoNaN = manningsnCut[~np.isnan(bathyTopoInsideSubElement)]
-
+                    # bathyTopoInsideSubElementNoNaN = bathyTopoInsideSubElement[~np.isnan(bathyTopoInsideSubElement)]
+                    # manningsnCutNoNaN = manningsnCut[~np.isnan(bathyTopoInsideSubElement)]
+                    # JLW: remove these lines
+                    manningsnInside = manningsnCut[insideSubElement==True]
+                    
                     # get the total water depth at each surface elevation
                             
-                    temptotWatDepth =  surfaceElevations[:,None] - bathyTopoInsideSubElementNoNaN
+                    # temptotWatDepth =  surfaceElevations[:,None] - bathyTopoInsideSubElementNoNaN
+                    temptotWatDepth =  surfaceElevations[:,None] - bathyTopoInsideSubElement
                             
                     # count the number of wet cells
                             
@@ -1730,7 +1735,8 @@ class subgridCalculatormain():
                     # find the mannings for only wet areas then 0 the rest for 
                     # use in calculations 
                             
-                    manningsnCutNoNaNWet = manningsnCutNoNaN * wetCellsInSubArea
+                    # manningsnCutNoNaNWet = manningsnCutNoNaN * wetCellsInSubArea
+                    manningsnCutNoNaNWet = manningsnInside * wetCellsInSubArea
                             
                     tempcf = (9.81*manningsnCutNoNaNWet**2)/(temptotWatDepth**(1/3))
                     # set 0 tempcf to nan to prevent 0 divide
@@ -1752,8 +1758,10 @@ class subgridCalculatormain():
                     # set wet total water depth to 0
                     tempwetTotWatDepthData[k,np.isnan(tempwetTotWatDepthData[k,:])] = 0.0
                     # set nan values to cf calculated from mean mannings n and 8 cm of water
-                    tempcfData[k,np.isnan(tempcfData[k,:])] = 9.81*np.mean(manningsnCutNoNaN)**2/(0.08**(1/3))
-                    tempcmfData[k,np.isnan(tempcmfData[k,:])] = 9.81*np.mean(manningsnCutNoNaN)**2/(0.08**(1/3))
+                    # tempcfData[k,np.isnan(tempcfData[k,:])] = 9.81*np.mean(manningsnCutNoNaN)**2/(0.08**(1/3))
+                    # tempcmfData[k,np.isnan(tempcmfData[k,:])] = 9.81*np.mean(manningsnCutNoNaN)**2/(0.08**(1/3))
+                    tempcfData[k,np.isnan(tempcfData[k,:])] = 9.81*np.mean(manningsnInside)**2/(0.08**(1/3))
+                    tempcmfData[k,np.isnan(tempcmfData[k,:])] = 9.81*np.mean(manningsnInside)**2/(0.08**(1/3))
                     # set advection correction equal to 1.0
                     tempcadvData[k,np.isnan(tempcadvData[k,:])] = 1.0
                 
