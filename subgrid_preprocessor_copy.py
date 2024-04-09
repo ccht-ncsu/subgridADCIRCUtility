@@ -1477,8 +1477,6 @@ class subgridCalculatormain():
         countArray = np.zeros(numNode).astype(int)
         # loop through vertices to get connected elements
         
-        # start = time.time()
-        
         for i in range(numEle):
             # find connected elements
             nm0 = meshConnectivity[i,0]
@@ -1493,24 +1491,6 @@ class subgridCalculatormain():
             countArray[nm1]+=1
             countArray[nm2]+=1
 
-        # end = time.time()
-        # print('This took {} s'.format(end-start))
-        # start = time.time()
-        # now look at old method 
-        # vertex connectivity 
-        # vertexConnectOld = np.zeros((numNode,maxConnectedVertex)).astype(int)
-        # nodeList = [627355, 627356, 635086]
-        # for node in nodeList:
-        #     # start1 = time.time()
-        #     connectedElements = np.where(meshConnectivity==node)[0]
-        #     vertexConnectOld[node,:len(connectedElements)] = connectedElements
-        #     # end1 = time.time()
-        #     # print('Finished {} percent took {}'.format((i/numNode)*100,end1-start1))
-        # # end = time.time()
-        # # print('Old method took {} s'.format(end-start))
-
-        # return vertexConnect, vertexConnectOld, countArray
-        # start = time.time()
         # fill this vertex Data Array
         for i in range(numNode):
             # find connected elements (this is the slowest part)
@@ -1521,10 +1501,8 @@ class subgridCalculatormain():
             connectedElements = vertexConnect[i,:countArray[i]]
             # fill in vertex data
             for j in range(len(connectedElements)):
-            # for j in range(len(connectedElements)):
                 # get vertices of subelement
                 ele = connectedElements[j]
-                # ele = vertexConnect[i,j]
                 # other vertices 
                 otherVertices = meshConnectivity[ele,meshConnectivity[ele,:]!=i]
                 # order vertices how you want
@@ -1548,9 +1526,7 @@ class subgridCalculatormain():
                 subAreaPerimeter = np.array((meshLon[nm0],midPointLon1,centroidLon,midPointLon2,
                                             meshLat[nm0],midPointLat1,centroidLat,midPointLat2))
                 vertexData[i,j,:] = subAreaPerimeter
-                
-        # end = time.time()
-        # print('Filling vertex took {} s'.format(end-start))
+
         # get an array of max and min vertex area coordinates
         vertexAreaMinLon = np.nanmin(vertexData[:,:,:4],axis=(1,2))
         vertexAreaMaxLon = np.nanmax(vertexData[:,:,:4],axis=(1,2))
@@ -1574,6 +1550,7 @@ class subgridCalculatormain():
         vertexUseList = np.ones(numNode,dtype=bool)
         # keep track of total calc time
         startTotal = time.time()
+        
         for i in range(len(demFilenameList)):
             # reading in DEM again
             # all variables the same as before
@@ -1622,7 +1599,8 @@ class subgridCalculatormain():
             for j in range(len(idxAllWithin)):
                 start = time.time()
                 # find how many connected elements
-                conElementCount = np.count_nonzero(~np.isnan(vertexData[idxAllWithin[j],:,0])) 
+                # conElementCount = np.count_nonzero(~np.isnan(vertexData[idxAllWithin[j],:,0])) 
+                conElementCount = countArray[idxAllWithin[j]]
                 # create array to hold vertex area data 
                 vertexSubArea = np.zeros((conElementCount,1))
                 # temporarily allocate for each subarea variable
@@ -1712,21 +1690,28 @@ class subgridCalculatormain():
                             
                     # get just he bathy topo inside the sub element 
                             
-                    bathyTopoInsideSubElement = demBathyTopoCut*insideSubElement
+                    # bathyTopoInsideSubElement = demBathyTopoCut*insideSubElement
+                    # take out unnecessary calc
+                    bathyTopoInsideSubElement = demBathyTopoCut[insideSubElement==True]
+     
+                    # # set 0 values to nan for calculations
                             
-                    # set 0 values to nan for calculations
-                            
-                    bathyTopoInsideSubElement[bathyTopoInsideSubElement==0] = np.nan
+                    # bathyTopoInsideSubElement[bathyTopoInsideSubElement==0] = np.nan
+                    # JLW: fix this and set cells outside subelement to nan
+                    # bathyTopoInsideSubElement[insideSubElement==False] = np.nan
                             
                     # get area of sub element
                     vertexSubArea[k] = tri0Area + tri1Area # used for area weighting later
                     # remove cells not inside sub element which will flatten the array
-                    bathyTopoInsideSubElementNoNaN = bathyTopoInsideSubElement[~np.isnan(bathyTopoInsideSubElement)]
-                    manningsnCutNoNaN = manningsnCut[~np.isnan(bathyTopoInsideSubElement)]
-
+                    # bathyTopoInsideSubElementNoNaN = bathyTopoInsideSubElement[~np.isnan(bathyTopoInsideSubElement)]
+                    # manningsnCutNoNaN = manningsnCut[~np.isnan(bathyTopoInsideSubElement)]
+                    # JLW: remove these lines
+                    manningsnInside = manningsnCut[insideSubElement==True]
+                    
                     # get the total water depth at each surface elevation
                             
-                    temptotWatDepth =  surfaceElevations[:,None] - bathyTopoInsideSubElementNoNaN
+                    # temptotWatDepth =  surfaceElevations[:,None] - bathyTopoInsideSubElementNoNaN
+                    temptotWatDepth =  surfaceElevations[:,None] - bathyTopoInsideSubElement
                             
                     # count the number of wet cells
                             
@@ -1737,7 +1722,7 @@ class subgridCalculatormain():
                     # now set tot water depth of dry cells to nan
                             
                     temptotWatDepth[temptotWatDepth < 0.0001] = np.nan
-            
+    
                     # add to wet frac array
                             
                     tempwetFractionData[k,:] = wetCellsInSubAreaCount/cellsInSubElement
@@ -1750,7 +1735,10 @@ class subgridCalculatormain():
                     # find the mannings for only wet areas then 0 the rest for 
                     # use in calculations 
                             
-                    manningsnCutNoNaNWet = manningsnCutNoNaN * wetCellsInSubArea
+                    # manningsnCutNoNaNWet = manningsnCutNoNaN * wetCellsInSubArea
+                    manningsnCutNoNaNWet = manningsnInside * wetCellsInSubArea
+
+                    return manningsnCutNoNaNWet, manningsnInside, wetCellsInSubArea
                             
                     tempcf = (9.81*manningsnCutNoNaNWet**2)/(temptotWatDepth**(1/3))
                     # set 0 tempcf to nan to prevent 0 divide
@@ -1772,8 +1760,10 @@ class subgridCalculatormain():
                     # set wet total water depth to 0
                     tempwetTotWatDepthData[k,np.isnan(tempwetTotWatDepthData[k,:])] = 0.0
                     # set nan values to cf calculated from mean mannings n and 8 cm of water
-                    tempcfData[k,np.isnan(tempcfData[k,:])] = 9.81*np.mean(manningsnCutNoNaN)**2/(0.08**(1/3))
-                    tempcmfData[k,np.isnan(tempcmfData[k,:])] = 9.81*np.mean(manningsnCutNoNaN)**2/(0.08**(1/3))
+                    # tempcfData[k,np.isnan(tempcfData[k,:])] = 9.81*np.mean(manningsnCutNoNaN)**2/(0.08**(1/3))
+                    # tempcmfData[k,np.isnan(tempcmfData[k,:])] = 9.81*np.mean(manningsnCutNoNaN)**2/(0.08**(1/3))
+                    tempcfData[k,np.isnan(tempcfData[k,:])] = 9.81*np.mean(manningsnInside)**2/(0.08**(1/3))
+                    tempcmfData[k,np.isnan(tempcmfData[k,:])] = 9.81*np.mean(manningsnInside)**2/(0.08**(1/3))
                     # set advection correction equal to 1.0
                     tempcadvData[k,np.isnan(tempcadvData[k,:])] = 1.0
                 
@@ -1797,7 +1787,6 @@ class subgridCalculatormain():
         # total time
         endTotal = time.time()
         print('All calulations took {} s'.format(endTotal-startTotal))
-
 
         # now I need to condense the lookup tables to only have 11 values corresponding to phi=0 to phi=1
         start = time.time() 
