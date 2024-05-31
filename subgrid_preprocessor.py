@@ -203,9 +203,126 @@ class subgridCalculatormain():
             
         return z_array,xRes,yRes,xCoords,yCoords
     
+################################ READ IN SUBGRID NETCDF ############################
+
+    def importSubgridLookup(subgridFilename):
+        
+        # subgridFilename : name of subgrid file with path
+
+        import netCDF4 as nc
+        import numpy as np
+
+        # read in netcdf
+        data = nc.Dataset(subgridFilename)
+        dict = {}
+        dict['wetFractionDepth'] = np.array(data['wetFractionVertex'])
+        dict['wetTotWatDepth'] = np.array(data['wetTotWatDepthVertex'])
+        dict['gridTotWatDepth'] = np.array(data['gridTotWatDepthVertex'])
+        dict['cf'] = np.array(data['cfVertex'])
+        dict['cmf'] = np.array(data['cmfVertex'])
+        dict['cadv'] = np.array(data['cadvVertex'])
+        dict['phiSet'] = np.array(data['phiSet'])
+
+        return dict
+    
+############## FUNCTION TO GET SUBGRID VARIABLES FOR A PARTICULAR WATER LEVEL ######
+
+    def getSubgridVariables(meshObject,subgridVariableDict,desiredWaterLevel=0.0):
+
+        # meshObject : mesh object from readMesh function
+        # subgridVariableDict: dictionary of all subgrid variables as numpy arrays
+        # from importSubgridLookup
+        # desiredWaterLevel : elevation to interpolate subgrid variables from
+        
+        import numpy as np
+
+        # allocate arrays for each subgrid variable
+        wetFraction = np.zeros(meshObject[2])
+        wetTotWatDepth = np.zeros(meshObject[2])
+        gridTotWatDepth = np.zeros(meshObject[2])
+        cf = np.zeros(meshObject[2])
+        cmf = np.zeros(meshObject[2])
+        cadv = np.zeros(meshObject[2])
+
+
+        for i in range(meshObject[2]): # loop through vertices
+
+            numGreater = 0
+
+            for j in range(len(subgridVariableDict['phiSet'])):
+
+                if(subgridVariableDict['wetFractionDepth'][i,j]>desiredWaterLevel):
+
+                    numGreater += 1 # count that the cell is greater 
+
+            if numGreater == len(subgridVariableDict['phiSet']): # always wet
+
+                wetFraction[i] = subgridVariableDict['phiSet'][0]
+                wetTotWatDepth[i] = subgridVariableDict['wetTotWatDepth'][i,0]
+                gridTotWatDepth[i] = subgridVariableDict['gridTotWatDepth'][i,0]
+                cf[i] = subgridVariableDict['cf'][i,0]
+                cmf[i] = subgridVariableDict['cmf'][i,0]
+                cadv[i] = subgridVariableDict['cadv'][i,0]
+
+            elif numGreater == 0: # always dry
+
+                wetFraction[i] = subgridVariableDict['phiSet'][-1]
+                wetTotWatDepth[i] = subgridVariableDict['wetTotWatDepth'][i,-1] + (desiredWaterLevel-subgridVariableDict['wetFractionDepth'][i,-1])
+                gridTotWatDepth[i] = subgridVariableDict['gridTotWatDepth'][i,-1] + (desiredWaterLevel-subgridVariableDict['wetFractionDepth'][i,-1])
+                cf[i] = subgridVariableDict['cf'][i,-1]
+                cmf[i] = subgridVariableDict['cmf'][i,-1]
+                cadv[i] = subgridVariableDict['cadv'][i,-1]
+
+            else:
+
+                wetFraction[i] = ((desiredWaterLevel - subgridVariableDict['wetFractionDepth'][i,len(subgridVariableDict['phiSet'])-numGreater-1])
+                                    /(subgridVariableDict['wetFractionDepth'][i,len(subgridVariableDict['phiSet'])-numGreater-1]
+                                    -subgridVariableDict['wetFractionDepth'][i,len(subgridVariableDict['phiSet'])-numGreater])
+                                    *(subgridVariableDict['phiSet'][len(subgridVariableDict['phiSet'])-numGreater]
+                                    -subgridVariableDict['phiSet'][len(subgridVariableDict['phiSet'])-numGreater-1])
+                                    +subgridVariableDict['phiSet'][len(subgridVariableDict['phiSet'])-numGreater-1])
+                
+                wetTotWatDepth[i] = ((desiredWaterLevel - subgridVariableDict['wetFractionDepth'][i,len(subgridVariableDict['phiSet'])-numGreater-1])
+                                        /(subgridVariableDict['wetFractionDepth'][i,len(subgridVariableDict['phiSet'])-numGreater-1]
+                                        -subgridVariableDict['wetFractionDepth'][i,len(subgridVariableDict['phiSet'])-numGreater])
+                                        *(subgridVariableDict['wetTotWatDepth'][i,len(subgridVariableDict['phiSet'])-numGreater]
+                                        -subgridVariableDict['wetTotWatDepth'][i,len(subgridVariableDict['phiSet'])-numGreater-1])
+                                        +subgridVariableDict['wetTotWatDepth'][i,len(subgridVariableDict['phiSet'])-numGreater-1])
+                
+                gridTotWatDepth[i] = ((desiredWaterLevel - subgridVariableDict['wetFractionDepth'][i,len(subgridVariableDict['phiSet'])-numGreater-1])
+                                        /(subgridVariableDict['wetFractionDepth'][i,len(subgridVariableDict['phiSet'])-numGreater-1]
+                                        -subgridVariableDict['wetFractionDepth'][i,len(subgridVariableDict['phiSet'])-numGreater])
+                                        *(subgridVariableDict['gridTotWatDepth'][i,len(subgridVariableDict['phiSet'])-numGreater]
+                                        -subgridVariableDict['gridTotWatDepth'][i,len(subgridVariableDict['phiSet'])-numGreater-1])
+                                        +subgridVariableDict['gridTotWatDepth'][i,len(subgridVariableDict['phiSet'])-numGreater-1])
+                
+                cf[i] = ((desiredWaterLevel - subgridVariableDict['wetFractionDepth'][i,len(subgridVariableDict['phiSet'])-numGreater-1])
+                        /(subgridVariableDict['wetFractionDepth'][i,len(subgridVariableDict['phiSet'])-numGreater-1]
+                        -subgridVariableDict['wetFractionDepth'][i,len(subgridVariableDict['phiSet'])-numGreater])
+                        *(subgridVariableDict['cf'][i,len(subgridVariableDict['phiSet'])-numGreater]
+                        -subgridVariableDict['cf'][i,len(subgridVariableDict['phiSet'])-numGreater-1])
+                        +subgridVariableDict['cf'][i,len(subgridVariableDict['phiSet'])-numGreater-1])
+                
+                cmf[i] = ((desiredWaterLevel - subgridVariableDict['wetFractionDepth'][i,len(subgridVariableDict['phiSet'])-numGreater-1])
+                            /(subgridVariableDict['wetFractionDepth'][i,len(subgridVariableDict['phiSet'])-numGreater-1]
+                            -subgridVariableDict['wetFractionDepth'][i,len(subgridVariableDict['phiSet'])-numGreater])
+                            *(subgridVariableDict['cmf'][i,len(subgridVariableDict['phiSet'])-numGreater]
+                            -subgridVariableDict['cmf'][i,len(subgridVariableDict['phiSet'])-numGreater-1])
+                            +subgridVariableDict['cmf'][i,len(subgridVariableDict['phiSet'])-numGreater-1])
+                
+                cadv[i] = ((desiredWaterLevel - subgridVariableDict['wetFractionDepth'][i,len(subgridVariableDict['phiSet'])-numGreater-1])
+                            /(subgridVariableDict['wetFractionDepth'][i,len(subgridVariableDict['phiSet'])-numGreater-1]
+                            -subgridVariableDict['wetFractionDepth'][i,len(subgridVariableDict['phiSet'])-numGreater])
+                            *(subgridVariableDict['cadv'][i,len(subgridVariableDict['phiSet'])-numGreater]
+                            -subgridVariableDict['cadv'][i,len(subgridVariableDict['phiSet'])-numGreater-1])
+                            +subgridVariableDict['cadv'][i,len(subgridVariableDict['phiSet'])-numGreater-1])
+                
+                dict = {'wetFraction':wetFraction,'wetTotWatDepth':wetTotWatDepth,
+                        'gridTotWatDepth':gridTotWatDepth,'cf':cf,'cmf':cmf,'cadv':cadv}
+
 #################### FUNCTION TO PLOT SUBGRID VERTEX VARIABLES #####################
 
-    def plotVertexSubgridVariable(meshObject,subgridVariable,levels=20):
+    def plotSubgridVariable(meshObject,subgridVariable,levels=20):
         
         import matplotlib.pyplot as plt
         import cmocean
@@ -220,7 +337,30 @@ class subgridCalculatormain():
         cbar.ax.set_ylabel('Elevation (m)', rotation=270,fontsize = 14)
         # ax1.set_title(title,fontsize=24)
         ax1.set_xlabel('Longitude',fontsize=20)
-        ax1.set_ylabel('Latitude',fontsize=20)   
+        ax1.set_ylabel('Latitude',fontsize=20)
+
+################### FUNCTION TO DOWNSCALE RESULTS #################################
+
+    def downscaleResults(meshObject,demObject,result):
+
+        # meshObject: mesh from readMesh function
+        # demObject: dem from importDEM function
+        # result: either maxEle or single timestep of fort63 results 
+        # obtained from their respective read tools
+
+        from scipy.interpolate import griddata
+        import numpy as np
+
+        interp = griddata(np.array((meshObject[0]['Longitude'],meshObject[0]['Latitude'])).T,
+                            result,(demObject[0],demObject[1]),method='linear')
+        # perform downscaling
+        interpMinusDEM = interp - demObject[2]
+        interpMinusDEM[interpMinusDEM>0] = interp[interpMinusDEM>0]
+        interpMinusDEM[interpMinusDEM<0] = np.nan
+
+        return interpMinusDEM # return resultant array 
+    
+########## READ MANNINGS #############################################
         
     def readManning(manningsnFilename):
         
