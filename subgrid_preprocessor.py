@@ -232,7 +232,7 @@ class subgridCalculatormain():
         # meshObject : mesh object from readMesh function
         # subgridVariableDict: dictionary of all subgrid variables as numpy arrays
         # from importSubgridLookup
-        # desiredWaterLevel : elevation to interpolate subgrid variables from
+        # desiredWaterLevel : elevation to interpolate subgrid variables from default = 0.0 m
         
         import numpy as np
 
@@ -317,8 +317,10 @@ class subgridCalculatormain():
                             -subgridVariableDict['cadv'][i,len(subgridVariableDict['phiSet'])-numGreater-1])
                             +subgridVariableDict['cadv'][i,len(subgridVariableDict['phiSet'])-numGreater-1])
                 
-                dict = {'wetFraction':wetFraction,'wetTotWatDepth':wetTotWatDepth,
-                        'gridTotWatDepth':gridTotWatDepth,'cf':cf,'cmf':cmf,'cadv':cadv}
+        dict = {'wetFraction':wetFraction,'wetTotWatDepth':wetTotWatDepth,
+                'gridTotWatDepth':gridTotWatDepth,'cf':cf,'cmf':cmf,'cadv':cadv}
+        
+        return dict
 
 #################### FUNCTION TO PLOT SUBGRID VERTEX VARIABLES #####################
 
@@ -339,6 +341,21 @@ class subgridCalculatormain():
         ax1.set_xlabel('Longitude',fontsize=20)
         ax1.set_ylabel('Latitude',fontsize=20)
 
+############################## READ MAXELE ########################################
+
+    def readMaxele(maxEleFilename):
+
+        # maxElefilename: filepath for maxEle file
+
+        import netCDF4 as nc
+        import numpy as np
+        
+        ds = nc.Dataset(maxEleFilename)
+        
+        maxEle = np.asarray(ds['zeta_max'][:])
+        
+        return maxEle
+    
 ################### FUNCTION TO DOWNSCALE RESULTS #################################
 
     def downscaleResults(meshObject,demObject,result):
