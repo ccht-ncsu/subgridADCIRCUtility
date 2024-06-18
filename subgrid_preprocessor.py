@@ -356,6 +356,21 @@ class subgridCalculatormain():
         
         return maxEle
     
+############################## READ FORT63 ########################################
+
+    def readfort63(fort63Filename):
+
+        # maxElefilename: filepath for maxEle file
+
+        import netCDF4 as nc
+        import numpy as np
+        
+        ds = nc.Dataset(fort63Filename)
+        
+        zs = np.asarray(ds['zeta'][:])
+        
+        return zs
+    
 ################### FUNCTION TO DOWNSCALE RESULTS #################################
 
     def downscaleResults(meshObject,demObject,result):
@@ -367,15 +382,14 @@ class subgridCalculatormain():
 
         from scipy.interpolate import griddata
         import numpy as np
-
+        interpMethod='nearest'
         interp = griddata(np.array((meshObject[0]['Longitude'],meshObject[0]['Latitude'])).T,
-                            result,(demObject[0],demObject[1]),method='linear')
+                            result,(demObject[0],demObject[1]),method=interpMethod)
         # perform downscaling
         interpMinusDEM = interp - demObject[2]
-        interpMinusDEM[interpMinusDEM>0] = interp[interpMinusDEM>0]
-        interpMinusDEM[interpMinusDEM<0] = np.nan
+        interp[interpMinusDEM<0] = np.nan
 
-        return interpMinusDEM # return resultant array 
+        return interp # return resultant array 
     
 ########## READ MANNINGS #############################################
         
