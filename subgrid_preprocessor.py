@@ -373,16 +373,17 @@ class subgridCalculatormain():
     
 ################### FUNCTION TO DOWNSCALE RESULTS #################################
 
-    def downscaleResults(meshObject,demObject,result):
+    def downscaleResults(meshObject,demObject,result,interpMethod='nearest'):
 
         # meshObject: mesh from readMesh function
         # demObject: dem from importDEM function
         # result: either maxEle or single timestep of fort63 results 
         # obtained from their respective read tools
+        # interpMethod: method you want to interpolate with 
+        # default is NN but could also do linear or cubic
 
         from scipy.interpolate import griddata
         import numpy as np
-        interpMethod='nearest'
         interp = griddata(np.array((meshObject[0]['Longitude'],meshObject[0]['Latitude'])).T,
                             result,(demObject[0],demObject[1]),method=interpMethod)
         # perform downscaling
