@@ -7,6 +7,7 @@ Based on the code written by jlwoodr3
 """
 
 import sys
+import os
 #from turtle import end_fill
 #from zmq import curve_keypair
 import numpy as np
@@ -738,7 +739,7 @@ class SubgridCalculatorDGP0():
                                                 np.min(yDEMCoordsTemp),
                                                 np.max(yDEMCoordsTemp)]
                 
-                print('Finished reading DEM {0}.'.format(i))
+                print('Finished reading DEM {0}.'.format(i), flush=True)
         else:
             try:
                 # set elevationData from user defined method
@@ -1038,30 +1039,37 @@ class SubgridCalculatorDGP0():
                                     xCutGeoTiffMatrix2,yCutGeoTiffMatrix2,
                                     difCriteria)
                 mask = np.logical_and(mask, np.isfinite(zCutGeoTiffMatrix2))
-                # print(xCutGeoTiffMatrix2)
-                # print(yCutGeoTiffMatrix2)
+
+                # count how many cells are within element
+                countIn = cp.count_nonzero(mask)
                 
+                # continue if there are no cells within the element
+                if countIn == 0:
+                    print('DEM {:d}: no cells inside in element {:d}. skipping.'.format(i, ele), flush=True)
+                    continue
+
                 # convert mask to cupy array
                 mask = cp.asarray(mask)
                 zCutGeoTiffMatrix2 = cp.asarray(zCutGeoTiffMatrix2)
                 nCutGeoTiffMatrix2 = cp.asarray(nCutGeoTiffMatrix2)
                 
                 zCutGeoTiffMatrix2masked = zCutGeoTiffMatrix2[mask]
-                nCutGeoTiffMatrix2masked = nCutGeoTiffMatrix2[mask]
+
+                try:
+                    nCutGeoTiffMatrix2masked = nCutGeoTiffMatrix2[mask]
+                except IndexError:
+                    print('IndexError occurred.')
+                    print('  ele: {}, minRow: {}, maxRow: {}, minCol: {}, maxCol: {}, zshape: {}, nshape: {}.'.format(ele, minRow, maxRow, minCol, maxCol, zCutGeoTiffMatrix2.shape, nCutGeoTiffMatrix2.shape))
+                    continue
                 
                 # get the min/max elevation of the element
-                # print(zCutGeoTiffMatrix2masked.shape,nCutGeoTiffMatrix2masked.shape)
-                minElev = cp.nanmin(zCutGeoTiffMatrix2masked)
-                maxElev = cp.nanmax(zCutGeoTiffMatrix2masked)
+                try:
+                    minElev = cp.nanmin(zCutGeoTiffMatrix2masked)
+                    maxElev = cp.nanmax(zCutGeoTiffMatrix2masked)
+                except ValueError:
+                    print('DEM {:d}: error while taking min/max elev. in element {:d}. skipping.'.format(i, ele), flush=True)
+                    continue
 
-                # count how many cells are within element
-                countIn = cp.count_nonzero(mask)
-                
-                # if there are no cells within the element the DEM is too coarse
-                # you must decrease the DEM resolution in this area
-                if countIn == 0:
-                    sys.exit('DEM {0} resolution too coarse!'.format(i))
-            
                 # keep track of this for use later
                 countInElement += countIn
             
@@ -1197,7 +1205,7 @@ class SubgridCalculatorDGP0():
                 countElementLoop += 1
                 if countElementLoop%1000==0:
                     stopTime = time.perf_counter()
-                    print("Finished Element {0} of {1} in DEM {2} took {3}".format(countElementLoop,len(elementList),i,stopTime - startTime))
+                    print("Finished Element {0} of {1} in DEM {2} took {3}".format(countElementLoop,len(elementList),i,stopTime - startTime, flush=True), flush=True)
 
         # add bottom limit on cf and cmf
         cf[cf<self.cf_lower_lim] = self.cf_lower_lim
@@ -1609,7 +1617,7 @@ class SubgridCalculatorDGP0():
                                             np.min(yDEMCoordsTemp),
                                             np.max(yDEMCoordsTemp)]
                 
-                print('Finished reading DEM {0}.'.format(i))
+                print('Finished reading DEM {0}.'.format(i), flush=True)
         else:
             try:
                 # set elevationData from user defined method
@@ -1653,7 +1661,7 @@ class SubgridCalculatorDGP0():
         totalEdgInfoTable[:,4] = np.max(yS,axis=1)  # populate maximum y values of the vertices of the edge
         
         # find if each element is within any of the given polygons
-        if hasattr(self.control, 'sgs_region_mask'):
+        if hasattr(self.control, 'sgs_region_mask') and os.path.isfile(self.control.sgs_region_mask):
             polys = gpd.read_file(self.control.sgs_region_mask).unary_union
             edgeInsidePolygon = \
             [all(gpd.GeoSeries([
@@ -1816,11 +1824,15 @@ class SubgridCalculatorDGP0():
                 zCutGeoTiffMatrix2 = zDEM[minRow:maxRow+1,minCol:maxCol+1]
             
                 # mask to find which cells are along an element edge
-                mask = scm.isAlong(currXPerimeterPoints[0],currYPerimeterPoints[0],
-                                   currXPerimeterPoints[1],currYPerimeterPoints[1],
-                                   xCutGeoTiffMatrix2,yCutGeoTiffMatrix2,
-                                   xDEMRes,yDEMRes)
-                                
+                try:
+                    mask = scm.isAlong(currXPerimeterPoints[0],currYPerimeterPoints[0],
+                                       currXPerimeterPoints[1],currYPerimeterPoints[1],
+                                       xCutGeoTiffMatrix2,yCutGeoTiffMatrix2,
+                                       xDEMRes,yDEMRes)
+                except:
+                    print('isAlong did not complete on edge {:d}'.format(edg), flush=True)                
+                    continue
+
                 # convert mask to cupy array
                 mask = cp.asarray(mask)
                 
@@ -1845,7 +1857,12 @@ class SubgridCalculatorDGP0():
                 # create array of surface elevations
                 # this is used to calculate the subgrid variables for varying water depths
                 surfElevIncrement = self.surfElevIncrement
-                minElevFloor = math.floor(minElev/surfElevIncrement)*surfElevIncrement
+                try:
+                    minElevFloor = math.floor(minElev/surfElevIncrement)*surfElevIncrement
+                except:
+                    print('Conversion to int failed at edge {}'.format(edg))
+                    continue
+
                 surfaceElevations = np.arange(minElevFloor,maxElev+surfElevIncrement,surfElevIncrement)
                 if len(surfaceElevations) < 2:
                     surfaceElevations = np.array([minElev,maxElev]).astype(np.float32)
@@ -1932,7 +1949,7 @@ class SubgridCalculatorDGP0():
                 countEdgLoop += 1
                 if countEdgLoop%1000==0:
                     stopTime = time.perf_counter()
-                    print("Finished Edge {0} of {1} in DEM {2} took {3}".format(countEdgLoop,len(edgList),i,stopTime - startTime))
+                    print("Finished Edge {0} of {1} in DEM {2} took {3}".format(countEdgLoop,len(edgList),i,stopTime - startTime), flush=True)
             
         wetFraction[np.isnan(wetFraction)] = 0.0
         wetTotWatDepth[np.isnan(wetTotWatDepth)] = 0.0
@@ -1973,7 +1990,7 @@ class SubgridCalculatorDGP0():
         self.subgridvectorized.wetFractionEdg = wetFraction
         self.subgridvectorized.edglength = length
         self.subgridvectorized.totWatDepthEdg = totWatDepth
-        self.subgridvectorized.binaryElementListEdg = binaryEdgList
+        self.subgridvectorized.binaryEdgList = binaryEdgList
         self.subgridvectorized.minElevationEdg = minElevationEdg
         self.subgridvectorized.maxElevationEdg = maxElevationEdg
         self.subgridvectorized.minElevationGlobal = minElevationGlobal
@@ -2199,7 +2216,7 @@ class SubgridCalculatorDGP0():
         self.subgridvectorized.wetFractionEdg = wetFraction
         self.subgridvectorized.edglength = length
         self.subgridvectorized.totWatDepthEdg = totWatDepth
-        self.subgridvectorized.binaryElementListEdg = binaryEdgList
+        self.subgridvectorized.binaryEdgList = binaryEdgList
         self.subgridvectorized.minElevationEdg = minElevationEdg
         self.subgridvectorized.maxElevationEdg = maxElevationEdg
         self.subgridvectorized.minElevationGlobalEdg = np.min(minElevationEdg)
@@ -2232,23 +2249,24 @@ class SubgridCalculatorDGP0():
         # write variable dimensions transposed because FORTRAN will read them that way
         # only need to do it for the 3D arrays, handle 2 and 1D a different way.
         # - element variables
-        elemIndex = ncFile.createVariable('elemLocations',int,'numElem')                       # indexes showing the locations of elements in the vectorized storage        
-        wetFractionVarElement = ncFile.createVariable('wetFraction',np.float32,'vecLen')  # elemental wet area fraction
+        elemIndex = ncFile.createVariable('elemLocations',int,'numElem')                          # indexes showing the locations of elements in the vectorized storage        
+        wetFractionVarElement = ncFile.createVariable('wetFraction',np.float32,'vecLen')          # elemental wet area fraction
         areaVar = ncFile.createVariable('area',np.float32,'numElem')                              # elemental areas
-        totWatDepthVar = ncFile.createVariable('totWatDepth',np.float32,'vecLen')         # elemental grid averaged total water depth
-        surfaceElevationsVar = ncFile.createVariable('surfaceElevations',np.float32,'vecLen') # surface elevation array
-        cfVarElement = ncFile.createVariable('cf',np.float32,'vecLen')                    # elemental coefficient of friction level 0
+        totWatDepthVar = ncFile.createVariable('totWatDepth',np.float32,'vecLen')                 # elemental grid averaged total water depth
+        surfaceElevationsVar = ncFile.createVariable('surfaceElevations',np.float32,'vecLen')     # surface elevation array
+        cfVarElement = ncFile.createVariable('cf',np.float32,'vecLen')                            # elemental coefficient of friction level 0
         if self.level0andLevel1:                                                                  # elemental coefficient of friction level 1
             cmfVarElement = ncFile.createVariable('cmf',np.float32,'vecLen')
-        binaryElementListVariable = ncFile.createVariable('binaryList',int,'numElem')      # variables showing which elements are contained within the subgrid area
-        minElevationEleVariable = ncFile.createVariable('minElevation',np.float32,'numElem')  # min elevation
-        maxElevationEleVariable = ncFile.createVariable('maxElevation',np.float32,'numElem')  # max elevation
+        binaryElementListVariable = ncFile.createVariable('binaryList',int,'numElem')             # variables showing which elements are contained within the subgrid area
+        minElevationEleVariable = ncFile.createVariable('minElevation',np.float32,'numElem')      # min elevation
+        maxElevationEleVariable = ncFile.createVariable('maxElevation',np.float32,'numElem')      # max elevation
         # - edge variables
-        edgeIndex = ncFile.createVariable('edgeLocations',int,'numEdge')                       # indexes showing the locations of elements in the vectorized storage        
+        edgeIndex = ncFile.createVariable('edgeLocations',int,'numEdge')                          # indexes showing the locations of elements in the vectorized storage        
         lenVarEdge = ncFile.createVariable('edgeLength',np.float32,'numEdge')                     # elemental areas
+        wetFractionVarEdge = ncFile.createVariable('edgeWetFraction',np.float32,'edgeVecLen')     # wet fraction array
         totWatDepthVarEdge = ncFile.createVariable('edgeTotWatDepth',np.float32,'edgeVecLen')     # elemental grid averaged total water depth
         surfaceElevationsVarEdge = ncFile.createVariable('edgeSurfaceElevations',np.float32,'edgeVecLen') # surface elevation array
-        binaryEdgeListVariable = ncFile.createVariable('edgeBinaryList',int,'numEdge')         # variables showing which elements are contained within the subgrid area
+        binaryEdgeListVariable = ncFile.createVariable('edgeBinaryList',int,'numEdge')            # variables showing which elements are contained within the subgrid area
         minElevationEdgeVariable = ncFile.createVariable('edgeMinElevation',np.float32,'numEdge') # min elevation
         maxElevationEdgeVariable = ncFile.createVariable('edgeMaxElevation',np.float32,'numEdge') # max elevation
         # - element-to-edge table
@@ -2270,9 +2288,10 @@ class SubgridCalculatorDGP0():
         # - edge values
         edgeIndex[:] = self.subgridvectorized.edgIndex + 1                                       # shift edgeIndex to make it begin with 1
         lenVarEdge[:] = self.subgridvectorized.edglength
+        wetFractionVarEdge[:] = self.subgridvectorized.wetFractionEdg
         totWatDepthVarEdge[:] = self.subgridvectorized.totWatDepthEdg
         surfaceElevationsVarEdge[:] = self.subgridvectorized.surfaceElevationsEdg
-        binaryEdgeListVariable[:] = self.subgridvectorized.binaryElementListEdg
+        binaryEdgeListVariable[:] = self.subgridvectorized.binaryEdgList
         minElevationEdgeVariable[:] = self.subgridvectorized.minElevationEdg
         maxElevationEdgeVariable[:] = self.subgridvectorized.maxElevationEdg
         # - element-to-edge table
@@ -2367,21 +2386,19 @@ class SubgridCalculatorDGP0():
                 import math
                 vinterp = np.zeros(numEle)
                 for ele in range(numEle):
-                    if se < minElevationEle[ele]:
+                    ista = elemIndex[ele]
+                    if ele == numEle - 1:
+                        iend = len(ve)
+                    else:
+                        iend = elemIndex[ele+1]
+
+                    if ista == iend:
+                        vinterp[ele] = np.nan
+                    elif se < minElevationEle[ele]:
                         vinterp[ele] = np.nan
                     elif  se > maxElevationEle[ele]:
-                        if ele == numEle - 1:
-                            ii = len(ve) - 1
-                        else:
-                            ii = elemIndex[ele+1] - 1
-                        vinterp[ele] = ve[ii]
+                        vinterp[ele] = ve[iend-1]
                     else:
-                        ista = elemIndex[ele]
-
-                        if ele == numEle - 1:
-                            iend = len(ve)
-                        else:
-                            iend = elemIndex[ele+1]
                         found = False
                         while True:
                             ii = math.floor((ista+iend)/2)
@@ -2395,7 +2412,8 @@ class SubgridCalculatorDGP0():
                             if ista == iend:
                                 break
                         if found == False:
-                            print("SE:{:.2f}, surfaceElev[0,end]=({:.2f},{:.2f})".format(se,surfaceEle[0],surfaceEle[-1]))
+                            print("ista:{:d}, iend:{:d}, SE:{:.2f}, surfaceElev[0,end]=({:.2f},{:.2f}), minElevationEle={:.2f}, maxElevationEle={:.2f}".\
+                                  format(ista, iend, se,surfaceElevs[0],surfaceElevs[-1],minElevationEle[ele],maxElevationEle[ele]))
                             sys.exit("Matching slot not found")
                         r = (se - surfaceElevs[ii])/(surfaceElevs[ii+1] - surfaceElevs[ii])
                         vinterp[ele] = (1-r)*ve[ii] + r*ve[ii+1]
@@ -2439,10 +2457,17 @@ class SubgridCalculatorDGP0():
         # area
         plotSingle(self,patches,self.subgridvectorized.area,"Elemental Area","area")
 
-        # # binaryList & binaryEdgList
-        # vn = np.asarray(self.mesh.coord['Elevation'])
-        # ve = np.mean(vn[self.mesh.tri],axis=1)
-        # plotSingle(self,patches,ve,"Elemental Elevation","elevation")
+        # binaryElementList
+        plotSingle(self,patches,self.subgridvectorized.binaryElementList,"Binary Element List","binaryelemlist")
+
+        # binaryEdgList by count
+        ve = np.zeros(self.mesh.numEle).astype(int)
+        for i in range(self.mesh.numEle):
+            ieds = self.mesh.el2ed[i]
+            edgList = self.subgridvectorized.binaryEdgList[ieds]
+            n_valid_edgs = np.count_nonzero(edgList)
+            ve[i] = n_valid_edgs
+        plotSingle(self,patches,ve,"Elemental # of Valid Edges","nvalidedges")
 
         # wetFraction
         plotMulti(self,patches,self.mesh.numEle,self.subgridvectorized.elemIndex,
@@ -2455,9 +2480,6 @@ class SubgridCalculatorDGP0():
                     self.subgridvectorized.surfaceElevations,
                     self.subgridvectorized.minElevationEle, self.subgridvectorized.maxElevationEle,
                     self.subgridvectorized.totWatDepth,surfElevForPlot,[0,10],"Elemental Total Water Depth","totwatdepth")
-
-        # binaryElementList
-        plotSingle(self,patches,self.subgridvectorized.binaryElementList,"Binary Element List","binaryelemlist")
 
         # minElevationEle
         plotSingle(self,patches,self.subgridvectorized.minElevationEle,"Elemental Min Elevation","minelev")
@@ -2509,7 +2531,7 @@ class SubgridCalculatorDGP0():
         msg = '{}: {:.2f}% done. elapsed time = {:.0f} {}. estimated remaining time = {:.0f} {}. estimated total time = {:.0f} {}.'.format(\
             self.header, percentage_done, elapsed_time, elapsed_unit, remaining_time, remaining_unit, estimated_total_time, estimated_total_unit)
         # self.wLabel.value = msg 
-        print(msg)
+        print(msg, flush=True)
 
     def show_progressbar(self, max_count, description, queue):
         sum = 0
