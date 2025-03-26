@@ -13,6 +13,8 @@ import os
 import numpy as np
 import math
 #import cupy as cp
+import rasterio
+from rasterio.mask import mask
 import geopandas as gpd
 import geowombat as gw
 from multiprocessing import Pool, Process, SimpleQueue
@@ -64,12 +66,22 @@ class SubgridCalculatorDGP0():
             self.xp = numpy
         else:
             self.xp = numpy
-        self.surfElevIncrement = 0.1
+        self.landtiff_type = 'landuse' # 'landuse' or 'manningsn'
+        self.min_wet_depth = 0.0
+        self.surfElevType = 'num_levels'
+        self.surfElevNumLevels = 20
+        self.surfElevFirstIncrement = 0.001
+        self.surfElevIncrement = 0.05
+        self.surfElevNumLevelsMinIncrement = 0.001
+        self.surfElevMinRange = 0.5
+        self.surfElevMinRangeIncrement = 0.05
         self.maxWatDepthAboveHighestGround = 3.0
         self.watDepthAboveHighestGroundIncrement = 1.0
 
         self.default_manningsn = 0.03
         self.cf_lower_lim = 0.0025
+        self.cf_min_depth = 0.001
+        self.cmf_formula = 'kannedy2019_corrected'
 
         self.need_projection = True
 
@@ -118,20 +130,16 @@ class SubgridCalculatorDGP0():
 
         self.control.outputFilename = outputFilename
         self.control.meshFilename = meshFilename
-        self.control.numDEMs = numDEMs
         self.control.demFilenameList = demFilenameList
-        self.control.numLCs = numLCs
         self.control.landcoverFilenameList = landcoverFilenameList
         self.control.loaded = True
 
     ######################## Function to set control parameters ###################
     
-    def setControlParameters(self, outputFilename, meshFilename, numDEMs=0, demFilenameList=[], numLCs=0, landcoverFilenameList=[]):
+    def setControlParameters(self, outputFilename, meshFilename, demFilenameList=[], landcoverFilenameList=[]):
         self.control.outputFilename = outputFilename
         self.control.meshFilename = meshFilename
-        self.control.numDEMs = numDEMs
         self.control.demFilenameList = demFilenameList
-        self.control.numLCs = numLCs
         self.control.landcoverFilenameList = landcoverFilenameList
         self.control.loaded = True
 
@@ -144,6 +152,8 @@ class SubgridCalculatorDGP0():
         import numpy as np
         
         if meshFilename == None:
+            if not self.control.loaded:
+                raise Exception('No mesh file name provided yet')
             meshFilename = self.control.meshFilename
         else:
             self.control.meshFilename = meshFilename
@@ -214,12 +224,18 @@ class SubgridCalculatorDGP0():
                                         94:0.048, 95:0.045, 96:0.045, 97:0.045, 98:0.015,
                                         99:0.015, 127:0.02}
             elif landCoverToManning== 'C-CAP':
-                landCoverToManning = {0:0.02, 2:0.15, 3:0.10, 4:0.05, 5:0.02,
-                                        6:0.037, 7:0.033, 8:0.034, 9:0.1, 10:0.11,
-                                        11:0.1, 12:0.05, 13:0.1, 14:0.048, 15:0.045,
-                                        16:0.1, 17:0.048, 18:0.045, 19:0.04,
-                                        20:0.09, 21:0.02, 22:0.015, 23:0.015,
-                                        25:0.01}
+                # landCoverToManning = {0:0.02, 2:0.15, 3:0.10, 4:0.05, 5:0.02,
+                #                         6:0.037, 7:0.033, 8:0.034, 9:0.1, 10:0.11,
+                #                         11:0.1, 12:0.05, 13:0.1, 14:0.048, 15:0.045,
+                #                         16:0.1, 17:0.048, 18:0.045, 19:0.04,
+                #                         20:0.09, 21:0.02, 22:0.015, 23:0.015,
+                #                         25:0.01}
+                landCoverToManning = {0:0.02, 2:0.12, 3:0.12, 4:0.12, 5:0.035,
+                                        6:0.1, 7:0.05, 8:0.035, 9:0.16, 10:0.18,
+                                        11:0.17, 12:0.08, 13:0.15, 14:0.075, 15:0.06,
+                                        16:0.15, 17:0.07, 18:0.05, 19:0.03,
+                                        20:0.03, 21:0.025, 22:0.035, 23:0.03,
+                                        24:0.09, 25:0.01}
             else:
                 raise Exception("landCoverToManning type should be 'NLCD' or 'C-CAP'")
              
@@ -229,27 +245,39 @@ class SubgridCalculatorDGP0():
         return
     
     ############ BUILD ELEMENT TRIANGLES #######################################
-    def build_gpd_elem_triangles(self):
+    def build_gpd_elem_triangles(self, mesh_epsg='epsg:4326', do_projection=True, outfile=None):
         polys = [Polygon(zip(self.mesh.coord.Longitude[tri],self.mesh.coord.Latitude[tri])) for tri in self.mesh.tri]
-        gdf = gpd.GeoDataFrame(index=list(range(len(polys))), crs='epsg:4326', geometry=polys)
+        gdf = gpd.GeoDataFrame(index=list(range(len(polys))), crs=mesh_epsg, geometry=polys)
         self.mesh.gpd_elem_triangles = gdf
         cent = LineString(self.mesh.gpd_elem_triangles.centroid).centroid
         lat_0 = cent.coords[0][1]
         lon_0 = cent.coords[0][0]
-        crs = "+proj=laea +lat_0={} +lon_0={}".format(lat_0,lon_0)
-        trigs = self.mesh.gpd_elem_triangles.to_crs(crs)
+        trigs = self.mesh.gpd_elem_triangles
+        if do_projection:
+            crs = "+proj=laea +lat_0={} +lon_0={}".format(lat_0,lon_0)
+            trigs = trigs.to_crs(crs)
         self.mesh.gpd_elem_triangles["area"] = trigs['geometry'].area
+        if outfile is not None:
+            self.mesh.gpd_elem_triangles.to_file(outfile, driver='GPKG')
         return
 
-    def build_gpd_edge_lines(self):
+    def read_gpd_elem_triangles(self, infile):
+        self.mesh.gpd_elem_triangles = gpd.read_file(infile)
+        return
+        
+    def build_gpd_edge_lines_and_polygons(self, mesh_epsg='epsg:4326', do_projection=True, outlinefile=None, outpolyfile=None):
         edges = [LineString(zip(self.mesh.coord.Longitude[edg],self.mesh.coord.Latitude[edg])) for edg in self.mesh.ed2nd]
-        gdf = gpd.GeoDataFrame(index=list(range(len(edges))), crs='epsg:4326', geometry=edges)
+        gdf = gpd.GeoDataFrame(index=list(range(len(edges))), crs=mesh_epsg, geometry=edges)
         self.mesh.gpd_edge_lines = gdf
         cent = LineString(self.mesh.gpd_edge_lines.centroid).centroid
         lat_0 = cent.coords[0][1]
         lon_0 = cent.coords[0][0]
-        crs = "+proj=laea +lat_0={} +lon_0={}".format(lat_0,lon_0)
-        lines_cart = self.mesh.gpd_edge_lines.to_crs(crs)
+        lines_cart = self.mesh.gpd_edge_lines
+        if do_projection:
+            crs = "+proj=laea +lat_0={} +lon_0={}".format(lat_0,lon_0)
+            lines_cart = lines_cart.to_crs(crs)
+        else:
+            crs = mesh_epsg
         self.mesh.gpd_edge_lines["length"] = lines_cart['geometry'].length
 
         def gen_edge_poly(xys):
@@ -268,11 +296,22 @@ class SubgridCalculatorDGP0():
             poly = Polygon(zip(xs, ys))
             return poly
 
-        polys = [gen_edge_poly(geom.coords) for geom in lines_cart.geometry]
+        polys = [gen_edge_poly(geom.coords) for geom in self.mesh.gpd_edge_lines.geometry]
 
         self.mesh.gpd_edge_polygons = \
-            gpd.GeoDataFrame(index=list(range(len(polys))),
-                            crs=crs, geometry=polys).to_crs('epsg:4326')
+            gpd.GeoDataFrame(index=list(range(len(polys))), crs=mesh_epsg, geometry=polys)
+            
+        if outlinefile is not None:
+            self.mesh.gpd_edge_lines.to_file(outlinefile, driver='GPKG')
+
+        if outpolyfile is not None:
+            self.mesh.gpd_edge_polygons.to_file(outpolyfile, driver='GPKG')
+
+        return
+    
+    def read_gpd_edge_lines_and_polygons(self, inlinefile, inpolyfile):
+        self.mesh.gpd_edge_lines = gpd.read_file(inlinefile)
+        self.mesh.gpd_edge_polygons = gpd.read_file(inpolyfile)
         return
 
     ############ CALCULATE AREA OF A TRIANGLE #######################################
@@ -814,11 +853,11 @@ class SubgridCalculatorDGP0():
 
             # find which elements are in the DEM
             totalEleInfoTable[:,5] = ((totalEleInfoTable[:,1]>=elevationDict["bounds%s"%i][0])
-                                      & ((totalEleInfoTable[:,2])<=elevationDict["bounds%s"%i][1])
-                                      & ((totalEleInfoTable[:,3])>=elevationDict["bounds%s"%i][2])
-                                      & ((totalEleInfoTable[:,4])<=elevationDict["bounds%s"%i][3]))
+                                   &  (totalEleInfoTable[:,2]<=elevationDict["bounds%s"%i][1])
+                                   &  (totalEleInfoTable[:,3]>=elevationDict["bounds%s"%i][2])
+                                   &  (totalEleInfoTable[:,4]<=elevationDict["bounds%s"%i][3]))
         
-            whichAreInside = list(np.where([totalEleInfoTable[j,5] == 1 and elemInsidePolygon[j] for j in range(numEle)])[0])
+            whichAreInside = list(np.where([totalEleInfoTable[j,5] == 1 and elemInsidePolygon[j] for j in range(totalEleInfoTable.shape[0])])[0])
             elementDict["DEM%s"%i] = totalEleInfoTable[whichAreInside,0].astype(int)        # store element numbers of the elements inside the DEM bound
             
             whichAreInsideActualEleNumber = totalEleInfoTable[whichAreInside,0].astype(int) # get the actual element numbers 
@@ -910,13 +949,17 @@ class SubgridCalculatorDGP0():
         # landCoverValues = [0,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,25]
         
         # dictionary to translate between NLCD and Manning's values
-        landCoverToManning = {0:0.02, 11:0.02, 12:0.01, 21:0.02, 22:0.05, 23:0.1,
-                              24:0.15, 31:0.09, 32:0.04, 41:0.1, 42:0.11, 43:0.1,
-                              51:0.04, 52:0.05, 71:0.034, 72:0.03, 73:0.027, 74:0.025,
-                              81:0.033, 82:0.037, 90:0.1, 91:0.1, 92:0.048, 93:0.1,
-                              94:0.048, 95:0.045, 96:0.045, 97:0.045, 98:0.015,
-                              99:0.015, 127:0.02}
-        landCoverValues = landCoverToManning.keys()
+        # landCoverToManning = {0:0.02, 11:0.02, 12:0.01, 21:0.02, 22:0.05, 23:0.1,
+        #                       24:0.15, 31:0.09, 32:0.04, 41:0.1, 42:0.11, 43:0.1,
+        #                       51:0.04, 52:0.05, 71:0.034, 72:0.03, 73:0.027, 74:0.025,
+        #                       81:0.033, 82:0.037, 90:0.1, 91:0.1, 92:0.048, 93:0.1,
+        #                       94:0.048, 95:0.045, 96:0.045, 97:0.045, 98:0.015,
+        #                       99:0.015, 127:0.02}
+        
+        # landCoverValues = landCoverToManning.keys()
+        
+        landCoverToManning = self.landCoverToManning
+        landCoverValues = self.landCoverValues
 
         # first create a loop for DEMs
         for i in range(nDEMFilenameList):
@@ -1022,9 +1065,6 @@ class SubgridCalculatorDGP0():
                 xCutGeoTiffMatrix2 = xDEM[minRow:maxRow+1,minCol:maxCol+1]
                 yCutGeoTiffMatrix2 = yDEM[minRow:maxRow+1,minCol:maxCol+1]
                 zCutGeoTiffMatrix2 = zDEM[minRow:maxRow+1,minCol:maxCol+1]
-                # print(np.max(currYPerimeterPoints),np.min(currYPerimeterPoints),np.min(currXPerimeterPoints),np.max(currXPerimeterPoints))
-                # print(maxY,minY,minX,maxX)
-                # print(minRow,maxRow,minCol,maxCol)
                 nCutGeoTiffMatrix2 = nArray[minRow:maxRow+1,minCol:maxCol+1]
             
                 # for use in determining what cells lie within the element
@@ -1144,9 +1184,10 @@ class SubgridCalculatorDGP0():
                 # calulate now for the element then sum later for use 
                 # in other calulations
                 tempcf = 9.81*tempManningWetArray**2/tempTotWatDepthWetArray**(1/3)
-                tempcf[cp.where(tempcf==0.0)] = np.nan
+                # tempcf[cp.where(tempcf==0.0)] = np.nan
+                tempcf[tempcf==0.0] = np.nan
                 ###############################################################
-                
+                                
                 if self.level0andLevel1:
                     ############ NOW CALCULATE RV FROM KENNEDY ET AL 2019 #########
                     # integrate only now and then calculate full rv later
@@ -1166,9 +1207,9 @@ class SubgridCalculatorDGP0():
                 wetFractionTemp = wetDryElementList/countInElement
                 cfTemp = cfElementList/countInElement
                 if self.level0andLevel1:
-                    rvBottomTermList[cp.where(rvBottomTermList==0.0)] = np.nan
+                    rvBottomTermList[rvBottomTermList==0.0] = np.nan
                     cmfTemp = (wetAvgTotWatDepth)*(wetAvgTotWatDepth/(rvBottomTermList/wetDryElementList))**2
-                    cmfTemp[cp.where(cmfTemp==np.nan)] = 0.0
+                    cmfTemp[cmfTemp==np.nan] = 0.0
 
                 ####### convert to np array #######
                 def get_ndarray(array):
@@ -1286,9 +1327,11 @@ class SubgridCalculatorDGP0():
             ele_gpd = gpd_elem_triangles.iloc[ele:ele+1]
 
             try:
-                clipped_dem_xarray = tif_dem.gw.clip_by_polygon(ele_gpd, mask_data=True, expand_by=0)
+                # clipped_dem_xarray = tif_dem.gw.clip_by_polygon(ele_gpd, mask_data=True, expand_by=0)
+                clipped_dem_xarray = gw.clip_by_polygon(tif_dem, ele_gpd, mask_data=True, expand_by=0)
                 clipped_dem = clipped_dem_xarray.to_numpy()
             except Exception as e:
+                print(e)
                 continue
 
             clipped_lan = tif_lan.interp(x=clipped_dem_xarray.x, y=clipped_dem_xarray.y, method="nearest").to_numpy()
@@ -1456,7 +1499,7 @@ class SubgridCalculatorDGP0():
                 if max(chunks[-1]) != len(target_elems)-1:
                     i = math.floor(len(target_elems)/elems_per_task)
                     chunks.append([target_elems[j] for j in range(i*elems_per_task,len(target_elems))])
-            print('chunks = ', chunks)
+            # print('chunks = ', chunks)
             
             with gw.open(demFilename) as tif_dem, gw.open(lanFilename) as tif_lan:
                 countElementLoop = 0
@@ -1469,7 +1512,7 @@ class SubgridCalculatorDGP0():
                     cnt = 0
                     for i, rets_chunk in enumerate(pool.imap(partial( \
                         SubgridCalculatorDGP0.generate_table_for_element_chunk, 
-                        tif_dem, tif_lan, self.mesh.gpd_elem_triangles, 
+                        tif_dem, tif_lan, self.mesh.gpd_elem_triangles,
                         self.minimum_pixels_per_elem, self.landCoverToManning, self.surfElevIncrement, 
                         self.watDepthAboveHighestGroundIncrement, self.maxWatDepthAboveHighestGround, 
                         self.level0andLevel1, self.cf_lower_lim,
@@ -1477,11 +1520,15 @@ class SubgridCalculatorDGP0():
 
                         cnt += len(chunks[i])
 
+                        print('a')
                         for index, ret in enumerate(rets_chunk):
                             ele = chunks[i][index]
                             rets[ele] = ret
                             if ret:
                                 binaryElementList[ele] = 1
+                            print("Element: {}".format(ele))
+                            print("- ret:")
+                            print(ret)
                 
                 shared_queue.put(-1)
                 pb_process.join()
@@ -1560,9 +1607,516 @@ class SubgridCalculatorDGP0():
         if self.level0andLevel1:
             self.subgridvectorized.cmf = cmf
         self.subgridvectorized.loaded = True
+        
+        return
+    
+    def generate_surface_elevations(\
+        surfElevType, surfElevNumLevels, surfElevIncrement, \
+        surfElevFirstIncrement, \
+        minElev, maxElev, \
+        surfElevNumLevelsMinIncrement, \
+        surfElevMinRange, surfElevMinRangeIncrement, \
+        watDepthAboveHighestGroundIncrement, maxWatDepthAboveHighestGround \
+            ):
+        
+        if surfElevFirstIncrement > surfElevNumLevelsMinIncrement:
+            raise Exception('surfElevFirstIncrement must be less than surfElevNumLevelsMinIncrement.')
+        if surfElevFirstIncrement > surfElevMinRangeIncrement:
+            raise Exception('surfElevFirstIncrement must be less than surfElevMinRangeIncrement.')
+        if surfElevFirstIncrement > watDepthAboveHighestGroundIncrement:
+            raise Exception('surfElevFirstIncrement must be less than watDepthAboveHighestGroundIncrement.')
+        
+        minElev_ = minElev + surfElevFirstIncrement
+        surfaceElevations = np.array([minElev, minElev_])
+        if surfElevType == 'num_levels':
+            if maxElev - minElev < surfElevNumLevelsMinIncrement:
+                pass
+            else:
+                surfElevNumLevels_ = min(int(np.floor((maxElev - minElev)/surfElevNumLevelsMinIncrement)), surfElevNumLevels)
+                surfaceElevations = np.append(surfaceElevations, 
+                                              np.linspace(minElev,maxElev,surfElevNumLevels_+1)[1:])
+        elif surfElevType == 'increment':
+            if maxElev - minElev < surfElevIncrement:
+                pass               
+            else:
+                surfaceElevations = np.append(surfaceElevations, np.arange(minElev,maxElev+surfElevIncrement,surfElevIncrement)[1:-1])
+        else:
+            raise Exception('Invalid surface elevation type selected.')
+
+        if surfaceElevations[-1] == surfaceElevations[0] < surfElevMinRange + 1e-6:
+            if surfaceElevations[-1] == minElev_:
+                surfaceElevLast = minElev
+            else:
+                surfaceElevLast = surfaceElevations[-1]
+            surfaceElevations_ = np.arange(surfaceElevLast+surfElevMinRangeIncrement,
+                                           surfaceElevLast+surfElevMinRange+surfElevMinRangeIncrement,
+                                           surfElevMinRangeIncrement)
+            surfaceElevations = np.append(surfaceElevations,surfaceElevations_)
+
+        r1 = surfaceElevations[-1] + watDepthAboveHighestGroundIncrement
+        r2 = r1 + maxWatDepthAboveHighestGround
+        surfaceElevations = np.append(surfaceElevations, np.arange(r1,r2,watDepthAboveHighestGroundIncrement))
+
+        return surfaceElevations.astype(np.float32)
+
+    ########## CALCULATE ELEMENT SUBGRID CORRECTION FOR VECTORIZED STORAGE ##########
+    #########  USING RASTERIO ######################################################
+        
+    def generate_table_for_element_chunk_rasterio( \
+        demFilename, lanFilename, landtiff_type, gpd_elem_triangles, \
+        min_wet_depth, \
+        minimum_pixels_per_elem,
+        landCoverToManning, \
+        surfElevType, surfElevNumLevels, surfElevIncrement, \
+        surfElevFirstIncrement, \
+        surfElevNumLevelsMinIncrement, \
+        surfElevMinRange, surfElevMinRangeIncrement, \
+        watDepthAboveHighestGroundIncrement, maxWatDepthAboveHighestGround, \
+        level0andLevel1, cf_lower_lim, \
+        cmf_formula, \
+        do_distance_correction, \
+        target_elems_chunk):
+
+        def calc_rv_kennedy2019(tempTotWatDepthWetArray, tempcf, tempManningWetArray, countIn_dem):
+            return np.nansum(tempTotWatDepthWetArray**(3/2)*(tempcf)**(-1/2),axis = 0)
+            
+        def calc_rv_sfincs2025(tempTotWatDepthWetArray, tempcf, tempManningWetArray, countIn_dem):
+            return np.nansum(tempTotWatDepthWetArray**(5.0/3.0)/tempManningWetArray,
+                             axis = 0) / countIn_dem
+                        
+        def calc_cmf_kennedy2019(gridAvgTotWatDepth, wetAvgTotWatDepth, rvBottomTermList, wetDryElementList, ):
+            return (gridAvgTotWatDepth)*(wetAvgTotWatDepth/(rvBottomTermList/wetDryElementList))**2
+
+        def calc_cmf_kennedy2019_corrected(gridAvgTotWatDepth, wetAvgTotWatDepth, rvBottomTermList, wetDryElementList):
+            return (wetAvgTotWatDepth)*(wetAvgTotWatDepth/(rvBottomTermList/wetDryElementList))**2
+
+        def calc_cmf_sfincs2025(gridAvgTotWatDepth, wetAvgTotWatDepth, rvBottomTermList, wetDryElementList):
+            return gridAvgTotWatDepth**(5.0/3.0)/rvBottomTermList
+        
+        if cmf_formula == "kennedy2019":
+            calc_rv = calc_rv_kennedy2019
+            calc_cmf = calc_cmf_kennedy2019
+        elif cmf_formula == "kennedy2019_corrected":
+            calc_rv = calc_rv_kennedy2019
+            calc_cmf = calc_cmf_kennedy2019_corrected
+        elif cmf_formula == "sfincs2025":
+            calc_rv = calc_rv_sfincs2025
+            calc_cmf = calc_cmf_sfincs2025
+        else:
+            raise Exception("Invalid cmf_formula: {}. Choose either 'kennedy2019', 'kennedy2019_modified' or 'sfincs2025'".format(cmf_formula))
+
+        nelems = len(target_elems_chunk)
+
+        ret = [None] * nelems
+        
+        # Estimate the appropriate UTM CRS for the element geometry
+        utm_crs = gpd_elem_triangles.estimate_utm_crs()
+
+        with rasterio.open(demFilename) as src_dem, rasterio.open(lanFilename) as src_lan:
+            for iele, ele in enumerate(target_elems_chunk):
+                # startTime = time.perf_counter()
+                ele_gpd = gpd_elem_triangles.iloc[ele:ele+1]
+
+                out_image_dem, out_transform_dem = mask(src_dem, ele_gpd.geometry, nodata=-999999.0, crop=True)
+                clipped_dem = out_image_dem[0]
+                clipped_dem[clipped_dem <= -99999.0] = np.nan
+                
+                out_image_lan, out_transform_lan = mask(src_lan, ele_gpd.geometry, crop=True)
+                clipped_lan = out_image_lan[0]
+
+                # # Interpolate land cover values at the same pixel locations as DEM
+                # dem_coords = np.column_stack(np.where(~np.isnan(clipped_dem)))
+                # dem_coords = np.array([out_transform_dem * (x, y) for x, y in dem_coords])
+                # dem_coords = np.array([[x, y] for x, y in dem_coords])
+
+                # lan_coords = np.column_stack(np.where(~np.isnan(clipped_lan)))
+                # lan_coords = np.array([out_transform_lan * (x, y) for x, y in lan_coords])
+                # lan_coords = np.array([[x, y] for x, y in lan_coords])
+
+                # interpolated_lan = np.zeros_like(clipped_dem)
+                # for i, (x, y) in enumerate(dem_coords):
+                #     distances = np.sqrt((lan_coords[:, 0] - x)**2 + (lan_coords[:, 1] - y)**2)
+                #     nearest_index = np.argmin(distances)
+                #     interpolated_lan[np.where(~np.isnan(clipped_dem))[0][i], np.where(~np.isnan(clipped_dem))[1][i]] = clipped_lan[np.where(~np.isnan(clipped_lan))[0][nearest_index], np.where(~np.isnan(clipped_lan))[1][nearest_index]]
+
+                # clipped_lan = interpolated_lan
+                clipped_lan[np.isnan(clipped_dem)] = -1
+                    
+                if np.count_nonzero(~np.isnan(clipped_dem)) < minimum_pixels_per_elem or \
+                   np.count_nonzero(~np.isnan(clipped_lan)) < minimum_pixels_per_elem:
+                    continue
+
+                if do_distance_correction:
+                    # Ensure coordinates are in an appropriate UTM zone
+                    if ele_gpd.crs != utm_crs:
+                        ele_gpd = ele_gpd.to_crs(utm_crs)
+                        coords = np.array(ele_gpd.geometry.iloc[0].exterior.coords)
+                        x_tri = coords[:, 0]
+                        y_tri = coords[:, 1]
+
+                    a = np.linalg.norm([x_tri[1] - x_tri[0], y_tri[1] - y_tri[0]])
+                    b = np.linalg.norm([x_tri[2] - x_tri[1], y_tri[2] - y_tri[1]])
+                    c = np.linalg.norm([x_tri[0] - x_tri[2], y_tri[0] - y_tri[2]])
+                    s = (a + b + c) / 2
+                    area = np.sqrt(s * (s - a) * (s - b) * (s - c))
+                    radius_tri = area / s
+                
+                notnan = ~np.isnan(clipped_dem)
+                zCutGeoTiffMatrix2masked = clipped_dem[notnan]
+                nCutGeoTiffMatrix2masked = clipped_lan[notnan]
+
+                minElev = np.nanmin(zCutGeoTiffMatrix2masked)
+                maxElev = np.nanmax(zCutGeoTiffMatrix2masked)
+                
+                if landtiff_type == "landuse":
+                    # convert to Manning's n values
+                    landCoverValues = landCoverToManning.keys()
+                    mCutGeoTiffMatrix2masked = np.zeros_like(zCutGeoTiffMatrix2masked)
+                    mCutGeoTiffMatrix2masked[:] = 0.02
+                    # for value in landCoverValues:
+                    #     nCutGeoTiffMatrix2masked[nCutGeoTiffMatrix2masked == value] = landCoverToManning[value]
+                    # nCutGeoTiffMatrix2masked[nCutGeoTiffMatrix2masked >= 1.0] = 0.02     # set undefined values to 0.02
+                    # nCutGeoTiffMatrix2masked[nCutGeoTiffMatrix2masked <= 0.0] = 0.02     # set undefined values to 0.02
+                    for value in landCoverValues:
+                        mCutGeoTiffMatrix2masked[nCutGeoTiffMatrix2masked == value] = landCoverToManning[value]
+                    mCutGeoTiffMatrix2masked[mCutGeoTiffMatrix2masked >= 1.0] = 0.02     # set undefined values to 0.02
+                    mCutGeoTiffMatrix2masked[mCutGeoTiffMatrix2masked <= 0.0] = 0.02     # set undefined values to 0.02
+                    nCutGeoTiffMatrix2masked = mCutGeoTiffMatrix2masked
+                elif landtiff_type == "manningsn":
+                    pass # nCutGeoTiffMatrix2masked already represents Manning's n. Do nothing.
+                else:
+                    raise Exception('Invalid landtiff_type')
+
+                countIn_dem = np.count_nonzero(~np.isnan(clipped_dem))
+                countIn_lan = np.count_nonzero(~np.isnan(clipped_dem))
+
+                if countIn_dem == 0:
+                    raise Exception('DEM resolution too coarse for element {}!'.format(ele))
+
+                if countIn_lan == 0:
+                    raise Exception('Land cover resolution too coarse for element {}!'.format(ele))
+
+                surfaceElevations = SubgridCalculatorDGP0.generate_surface_elevations( \
+                    surfElevType, surfElevNumLevels, surfElevIncrement,
+                    surfElevFirstIncrement, \
+                    minElev, maxElev, \
+                    surfElevNumLevelsMinIncrement, \
+                    surfElevMinRange, surfElevMinRangeIncrement, \
+                    watDepthAboveHighestGroundIncrement, maxWatDepthAboveHighestGround)
+                num_SfcElevs = len(surfaceElevations)   # number of surface elevations we are running
+                wetDryElementList = np.zeros(num_SfcElevs)   # for wet area fraction phi
+                totWatElementList = np.zeros(num_SfcElevs)   # for grid total water depth H_G
+                cfElementList = np.zeros(num_SfcElevs)       # for coefficient of friction cf
+                
+                if level0andLevel1:
+                    # for Level 1 calculation
+                    rvBottomTermList = np.zeros(num_SfcElevs)
+
+                # create a 3d surface array for use in calculations
+                tempSurfaceElevArray = np.ones((len(zCutGeoTiffMatrix2masked),
+                                                    num_SfcElevs))*surfaceElevations
+
+                # create a 3d manning array for use in calculations            
+                tempManningArray = nCutGeoTiffMatrix2masked[:,np.newaxis]
+            
+                # subtract the bathymetry (2D Array) array from the surface 
+                # elevations (3D array) to get total water depths over the 
+                # element
+                tempTotWatDepthArray = tempSurfaceElevArray -  zCutGeoTiffMatrix2masked[:,np.newaxis]
+                
+                # find which of these cells are wet
+                # add some tiny minimum water depth so we dont have cells with
+                # like 10^-6 depths we will use 1 mm to start
+                tempWetDryList = tempTotWatDepthArray > min_wet_depth
+                
+                # count how many cells are wet
+                wetDryElementList = np.count_nonzero(tempWetDryList,axis=0)
+                # print('ele', ele, 'wetDryElementList', wetDryElementList, 'countIn_dem', countIn_dem, 'phi [', ' '.join(['{:.3f}'.format(phi) for phi in wetDryElementList/countIn_dem]), ']')
+                
+                #################### CALCULATING TOTAL WATER DEPTH ############
+            
+                # 0 out any dry cells
+                tempTotWatDepthWetArray = tempTotWatDepthArray * tempWetDryList
+                
+                # integrate the wet total water depths for use in averaging later
+                totWatElementList = np.sum(tempTotWatDepthWetArray,axis=0)
+    
+                #################### CALCULATING MANNINGS n ###################
+                # find the mannings for only wet areas then nan the rest for 
+                # use in calculations 
+                tempManningWetArray = tempManningArray * tempWetDryList
+
+                ########### CALCULATE GRID AVERAGED CF FOR MANNING ############
+                # calulate now for the element then sum later for use 
+                # in other calulations
+                tempcf = 9.81*tempManningWetArray**2/tempTotWatDepthWetArray**(1/3)
+                ###############################################################
+                
+                if level0andLevel1:
+                    ############ NOW CALCULATE RV FROM KENNEDY ET AL 2019 #########
+                    # integrate only now and then calculate full rv later
+                    # rvBottomTermList += np.nansum(tempTotWatDepthWetArray**(3/2)*\
+                    #     (tempcf)**(-1/2),axis = 0)
+                    # rvBottomTermList += np.nansum \
+                    # (
+                    #     tempTotWatDepthWetArray**(5.0/3.0)/tempManningWetArray,
+                    #     axis = 0
+                    # ) / countIn_dem
+                    rvBottomTermList = calc_rv \
+                        (tempTotWatDepthWetArray, tempcf, tempManningWetArray, countIn_dem)
+
+                # finally sum and add cf for use in grid averaged calculation
+                # tempcf = np.nansum(tempcf,axis=0)
+                tempcf = np.nansum(tempcf,axis=0)
+                cfElementList += tempcf
+            
+                if do_distance_correction:
+                    # Obtain (x,y) coordinates of each pixel in clipped_dem, ignoring the pixels at which their value is nan
+                    rows, cols = np.where(notnan)
+                    x_coords, y_coords = rasterio.transform.xy(out_transform_dem, rows, cols)
+                    
+                    # Transform coordinates to the appropriate UTM CRS
+                    src_crs = src_dem.crs
+                    dst_crs = utm_crs
+                    x_coords, y_coords = rasterio.warp.transform(src_crs, dst_crs, x_coords, y_coords)
+
+                    # Filter coordinates based on the wet/dry mask
+                    x_coords_wet = np.array(x_coords)[:, np.newaxis] * tempWetDryList
+                    x_coords_wet[tempWetDryList == 0] = np.nan
+                    y_coords_wet = np.array(y_coords)[:, np.newaxis] * tempWetDryList
+                    y_coords_wet[tempWetDryList == 0] = np.nan
+
+                    # Obtain the baricenter of the pixels
+                    x_baricenter_wet = np.nanmean(x_coords_wet, axis=0)
+                    y_baricenter_wet = np.nanmean(y_coords_wet, axis=0)
+
+                    # Obtain the radius as the distance from the baricenter to the pixel furthest from the baricenter
+                    distances_wet = np.sqrt((x_coords_wet - x_baricenter_wet)**2 + (y_coords_wet - y_baricenter_wet)**2)
+                    
+                    # Take the total depth weighted avegage of the distances
+                    radius_wet = np.nansum(distances_wet * tempTotWatDepthWetArray, axis=0) / totWatElementList
+                    if len(radius_wet) < 2:
+                        raise Exception('radius_wet has less than 2 elements. This is unexpected.')
+                    radius_wet[0] = radius_wet[1]
+                    
+                    radius_all = np.nanmean(np.sqrt((x_coords - np.nanmean(x_coords, axis=0))**2 + (y_coords - np.nanmean(y_coords, axis=0))**2), axis=0)
+                    
+                    # Calculate the distance correction factor
+                    distance_correction_factor = radius_wet / radius_all
+                    print("ele = \n", ele)
+                    print("surfaceElevations = \n", surfaceElevations)
+                    print("x_baricenter_wet = \n", x_baricenter_wet)
+                    print("y_baricenter_wet = \n", y_baricenter_wet)
+                    print("x_coords_wet = \n", x_coords_wet[:,-1])
+                    print("y_coords_wet = \n", y_coords_wet[:,-1])
+                    print("radius_wet = \n", radius_wet)
+                    print("radius_all = \n", radius_all)
+                    print("radius_tri = \n", radius_tri)
+                    print("distance_correction_factor = \n", distance_correction_factor) 
+                else:
+                    distance_correction_factor = 1.0
+
+                # Okay now we can finalize the values
+                wetAvgTotWatDepth = totWatElementList/wetDryElementList
+                gridAvgTotWatDepth = totWatElementList/countIn_dem
+                wetFractionTemp = wetDryElementList/countIn_dem
+                cfTemp = cfElementList/wetDryElementList * distance_correction_factor
+                cfTemp[np.isinf(cfTemp)] = np.nan
+                for i in reversed(range(len(cfTemp))): # Fill nan values with a non-nan value.
+                    if not np.isnan(cfTemp[i]):
+                        cfi = cfTemp[i]
+                    if np.isnan(cfTemp[i]):
+                        cfTemp[i] = cfi
+                if np.isnan(cfTemp).any() or np.isinf(cfTemp).any():
+                    raise Exception('cfTemp has nans or infs.')
+                
+                if level0andLevel1:
+                    rvBottomTermList[np.where(rvBottomTermList==0.0)] = np.nan
+                    # cmfTemp = (wetAvgTotWatDepth)*(wetAvgTotWatDepth/(rvBottomTermList/wetDryElementList))**2
+                    # cmfTemp = (gridAvgTotWatDepth)*(wetAvgTotWatDepth/(rvBottomTermList/wetDryElementList))**2
+                    # cmfTemp = gridAvgTotWatDepth**(5.0/3.0)/rvBottomTermList
+                    cmfTemp = calc_cmf \
+                        (gridAvgTotWatDepth, wetAvgTotWatDepth, rvBottomTermList, wetDryElementList) \
+                        * distance_correction_factor
+                    for i in reversed(range(len(cmfTemp))): # Fill nan values with a non-nan value.
+                        if not np.isnan(cmfTemp[i]):
+                            cmfi = cmfTemp[i]
+                        if np.isnan(cmfTemp[i]):
+                            cmfTemp[i] = cmfi
+                    if np.isnan(cmfTemp).any() or np.isinf(cmfTemp).any():
+                        raise Exception('cmfTemp has nans or infs.')
+
+                        
+                # store values
+                ret[iele] = [
+                    surfaceElevations,
+                    gridAvgTotWatDepth,
+                    wetAvgTotWatDepth,
+                    wetFractionTemp,
+                    cfTemp,
+                    cmfTemp,
+                    minElev,
+                    maxElev
+                ]
+
+        queue.put(len(target_elems_chunk))
+
+        return ret
+        
+    def calculateElementLookupTableForVectorizedStorageUsingRasterIO(self):
+        numEle = self.mesh.numEle
+
+        # find if each element is within any of the given polygons
+        if hasattr(self.control, 'sgs_region_mask') and self.control.sgs_region_mask:
+            polys = gpd.read_file(self.control.sgs_region_mask).unary_union
+            elemInsidePolygon = self.mesh.gpd_elem_triangles.within(polys)
+        else:
+            elemInsidePolygon = np.ones(numEle).astype(bool)
+
+        # make an int array
+        binaryElementList = np.zeros(numEle).astype(int)
+                
+        if len(self.control.demFilenameList) != len(self.control.landcoverFilenameList):
+            raise Exception("# of DEM files must match # of land cover files.")
+
+        # Temporary list for storing return values
+        rets = [None] * numEle
+
+        # Main loops
+        for ifile in range(len(self.control.demFilenameList)):
+            demFilename = self.control.demFilenameList[ifile]
+            lanFilename = self.control.landcoverFilenameList[ifile]
+            target_elems = np.where((binaryElementList == 0) & (elemInsidePolygon == True))[0]
+            # target_elems = [0]
+
+            max_count = len(target_elems)
+            chunk_size = self.mp_chunk_size
+            elems_per_task = min(chunk_size, math.floor(len(target_elems)/self.mp_ncores))
+            if elems_per_task == 0:
+                chunks = [list(target_elems)]
+            else:
+                chunks = [[target_elems[j] for j in range(i*elems_per_task,(i+1)*elems_per_task)] for i in range(math.floor(len(target_elems)/elems_per_task))]
+                if max(chunks[-1]) != len(target_elems)-1:
+                    i = math.floor(len(target_elems)/elems_per_task)
+                    chunks.append([target_elems[j] for j in range(i*elems_per_task,len(target_elems))])
+            # print('chunks = ', chunks)
+            
+            self.init_progressbar(max_count, "generating element lookup tables")
+            shared_queue = SimpleQueue()
+            pb_process = Process(target=self.show_progressbar, args=(max_count, "generating sgs tables", shared_queue))
+            pb_process.start()
+
+            with Pool(self.mp_ncores, initializer=SubgridCalculatorDGP0.init_worker, initargs=(shared_queue,)) as pool:
+                cnt = 0
+                for i, rets_chunk in enumerate(pool.imap(partial( \
+                    SubgridCalculatorDGP0.generate_table_for_element_chunk_rasterio, 
+                        demFilename, lanFilename, self.landtiff_type, self.mesh.gpd_elem_triangles,
+                        self.min_wet_depth,
+                        self.minimum_pixels_per_elem, self.landCoverToManning,
+                        self.surfElevType, self.surfElevNumLevels, self.surfElevIncrement,
+                        self.surfElevFirstIncrement,
+                        self.surfElevNumLevelsMinIncrement,
+                        self.surfElevMinRange, self.surfElevMinRangeIncrement,
+                        self.watDepthAboveHighestGroundIncrement, self.maxWatDepthAboveHighestGround, 
+                        self.level0andLevel1, self.cf_lower_lim, self.cmf_formula,
+                        self.do_distance_correction,
+                        ), chunks)):
+
+                    cnt += len(chunks[i])
+
+                    for index, ret in enumerate(rets_chunk):
+                        ele = chunks[i][index]
+                        rets[ele] = ret
+                        if ret:
+                            binaryElementList[ele] = 1
+            
+            shared_queue.put(-1)
+            pb_process.join()
+
+        # allocate the index that maps element to location in vector
+        elemIndex = np.zeros((numEle)).astype(int)
+        elemNumLevel = np.zeros((numEle)).astype(int)
+        elemIndexCnt = 0
+
+        # count number of levels
+        nlevels = 0
+        for ele in range(numEle):
+            ret = rets[ele]
+            if ret:
+                nlevels += len(ret[0])
+
+        # allocate arrays for subgrid quantities
+        surfElevs = np.zeros(nlevels,dtype=np.float32)
+        wetFraction = np.zeros(nlevels,dtype=np.float32)
+        area = np.zeros((numEle)).astype(np.float32)
+        totWatDepth = np.zeros(nlevels,dtype=np.float32)
+        wetTotWatDepth = np.zeros(nlevels,dtype=np.float32)
+        cf = np.zeros(nlevels,dtype=np.float32)
+        minElevationEle = np.zeros(numEle).astype(np.float32)           # find lowest elevation in each element for use in variable phi
+        maxElevationEle = np.zeros(numEle).astype(np.float32)           # find highest elevation in each element for use in variable phi
+        if self.level0andLevel1:
+            rv = np.zeros(nlevels,dtype=np.float32)
+            cmf = np.zeros(nlevels,dtype=np.float32)
+
+        # fill arrays
+        area[:] = -99999
+        minElevationEle[:] = 99999
+        maxElevationEle[:] = -99999
+
+        for ele in range(numEle):
+            ret = rets[ele]
+
+            if ret:
+                nse = len(ret[0])
+
+                ista = elemIndexCnt
+                iend = elemIndexCnt + nse
+                    
+                surfElevs[ista:iend] = ret[0]
+                totWatDepth[ista:iend] = ret[1]
+                wetTotWatDepth[ista:iend] = ret[2]
+                wetFraction[ista:iend] = ret[3]
+                cf[ista:iend] = ret[4]
+                if self.level0andLevel1:
+                    cmf[ista:iend] = ret[5]
+
+                elemIndex[ele] = elemIndexCnt
+                elemNumLevel[ele] = nse
+                elemIndexCnt = elemIndexCnt + nse
+        
+                minElevationEle[ele] = ret[6]
+                maxElevationEle[ele] = ret[7]
+
+                area[ele] = self.mesh.gpd_elem_triangles.loc[ele,"area"]   
+            else:
+                if ele > 0:
+                    elemIndex[ele] = elemIndex[ele-1] + elemNumLevel[ele-1]
+
+        # add bottom limit on cf and cmf
+        cf[cf<self.cf_lower_lim] = self.cf_lower_lim
+        cf[np.isnan(cf)] = self.cf_lower_lim
+        
+        if self.level0andLevel1:
+            cmf[cmf<self.cf_lower_lim] = self.cf_lower_lim
+            cmf[np.isnan(cmf)] = self.cf_lower_lim
+            
+        # store the resulting values
+        self.subgridvectorized.elemIndex = elemIndex
+        self.subgridvectorized.surfaceElevations = surfElevs
+        self.subgridvectorized.wetFraction = wetFraction
+        self.subgridvectorized.area = area
+        self.subgridvectorized.totWatDepth = totWatDepth
+        self.subgridvectorized.binaryElementList = binaryElementList
+        self.subgridvectorized.minElevationEle = minElevationEle
+        self.subgridvectorized.maxElevationEle = maxElevationEle
+        self.subgridvectorized.minElevationGlobal = np.min(minElevationEle)
+        self.subgridvectorized.maxElevationGlobal = np.max(maxElevationEle)
+        self.subgridvectorized.cf = cf
+        if self.level0andLevel1:
+            self.subgridvectorized.cmf = cmf
+        self.subgridvectorized.loaded = True
 
         return
-
 
     ########## CALCULATE EDGE SUBGRID CORRECTION FOR VECTORIZED STORAGE ##########
 
@@ -1860,7 +2414,7 @@ class SubgridCalculatorDGP0():
                 try:
                     minElevFloor = math.floor(minElev/surfElevIncrement)*surfElevIncrement
                 except:
-                    print('Conversion to int failed at edge {}'.format(edg))
+                    print('Conversion to int failed at edge {}. minElev:{}, surfElevIncrement:{}'.format(edg, minElev, surfElevIncrement))
                     continue
 
                 surfaceElevations = np.arange(minElevFloor,maxElev+surfElevIncrement,surfElevIncrement)
@@ -2129,7 +2683,7 @@ class SubgridCalculatorDGP0():
                 if max(chunks[-1]) != len(target_edges)-1:
                     i = math.floor(len(target_edges)/edges_per_task)
                     chunks.append([target_edges[j] for j in range(i*edges_per_task,len(target_edges))])
-            print('chunks = ', chunks)
+            # print('chunks = ', chunks)
             
             with gw.open(demFilename) as tif_dem:
                 countElementLoop = 0
@@ -2142,10 +2696,240 @@ class SubgridCalculatorDGP0():
                     cnt = 0
                     for i, rets_chunk in enumerate(pool.imap(partial( \
                         SubgridCalculatorDGP0.generate_table_for_edge_chunk,
-                        tif_dem, self.mesh.gpd_edge_polygons,
-                        self.minimum_pixels_per_edge, self.surfElevIncrement,
-                        self.watDepthAboveHighestGroundIncrement, self.maxWatDepthAboveHighestGround,
-                        ), chunks)):
+                            tif_dem, self.mesh.gpd_edge_polygons,
+                            self.minimum_pixels_per_edge, self.surfElevIncrement,
+                            self.watDepthAboveHighestGroundIncrement, self.maxWatDepthAboveHighestGround,
+                            ), chunks)):
+
+                        cnt += len(chunks[i])
+
+                        for index, ret in enumerate(rets_chunk):
+                            edg = chunks[i][index]
+                            rets[edg] = ret
+                            if ret:
+                                binaryEdgList[edg] = 1
+                
+                shared_queue.put(-1)
+                pb_process.join()
+
+        # allocate the index that maps element to location in vector
+        edgIndex = np.zeros((numEdg)).astype(int)
+        edgNumLevel = np.zeros((numEdg)).astype(int)
+        edgIndexCnt = 0
+
+        # count number of levels
+        nlevels = 0
+        for edg in range(numEdg):
+            ret = rets[edg]
+            if ret:
+                nlevels += len(ret[0])
+        
+        # allocate arrays for subgrid quantities
+        surfElevs = np.zeros(nlevels,dtype=np.float32)
+        wetFraction = np.zeros(nlevels,dtype=np.float32)
+        length = np.zeros((numEdg)).astype(np.float32)
+        totWatDepth = np.zeros(nlevels,dtype=np.float32)
+        wetTotWatDepth = np.zeros(nlevels,dtype=np.float32)
+        minElevationEdg = np.zeros(numEdg).astype(np.float32)           # find lowest elevation in each element for use in variable phi
+        maxElevationEdg = np.zeros(numEdg).astype(np.float32)           # find highest elevation in each element for use in variable phi
+
+        # fill arrays
+        length[:] = -99999
+        minElevationEdg[:] = 99999
+        maxElevationEdg[:] = -99999
+
+        for edg in range(numEdg):
+            ret = rets[edg]
+            
+            if ret:
+                nse = len(ret[0])
+
+                ista = edgIndexCnt
+                iend = edgIndexCnt + nse
+                    
+                surfElevs[ista:iend] = ret[0]
+                totWatDepth[ista:iend] = ret[1]
+                wetTotWatDepth[ista:iend] = ret[2]
+                wetFraction[ista:iend] = ret[3]
+
+                edgIndex[edg] = edgIndexCnt
+                edgNumLevel[edg] = nse
+                edgIndexCnt = edgIndexCnt + nse
+
+                minElevationEdg[edg] = ret[4]
+                maxElevationEdg[edg] = ret[5]
+
+                length[edg] = self.mesh.gpd_edge_lines.loc[edg,"length"]
+            else:
+                if edg > 0:
+                    edgIndex[edg] = edgIndex[edg-1] + edgNumLevel[edg-1]
+        
+        # store the resulting values
+        self.subgridvectorized.edgIndex = edgIndex
+        self.subgridvectorized.surfaceElevationsEdg = surfElevs
+        self.subgridvectorized.wetFractionEdg = wetFraction
+        self.subgridvectorized.edglength = length
+        self.subgridvectorized.totWatDepthEdg = totWatDepth
+        self.subgridvectorized.binaryEdgList = binaryEdgList
+        self.subgridvectorized.minElevationEdg = minElevationEdg
+        self.subgridvectorized.maxElevationEdg = maxElevationEdg
+        self.subgridvectorized.minElevationGlobalEdg = np.min(minElevationEdg)
+        self.subgridvectorized.maxElevationGlobalEdg = np.max(maxElevationEdg)
+        self.subgridvectorized.loadedEdg = True
+
+        return
+
+    ########## CALCULATE EDGE SUBGRID CORRECTION FOR VECTORIZED STORAGE ##########
+    ########## USING GEOWOMBAT ###################################################
+
+    def generate_table_for_edge_chunk_rasterio( \
+        demFilename, gpd_edge_polygons, \
+        min_wet_depth,
+        minimum_pixels_per_edge,
+        surfElevType, surfElevNumLevels, surfElevIncrement, \
+        surfElevFirstIncrement, \
+        surfElevNumLevelsMinIncrement, \
+        surfElevMinRange, surfElevMinRangeIncrement, \
+        watDepthAboveHighestGroundIncrement, maxWatDepthAboveHighestGround, \
+        target_edges_chunk):
+
+        nedges = len(target_edges_chunk)
+
+        ret = [None] * nedges
+
+        with rasterio.open(demFilename) as src_dem:
+            for iedg, edg in enumerate(target_edges_chunk):
+                # startTime = time.perf_counter()
+                edg_gpd = gpd_edge_polygons.iloc[edg:edg+1]
+
+                out_image_dem, out_transform_dem = mask(src_dem, edg_gpd.geometry, nodata=-999999.0, crop=True)
+                clipped_dem = out_image_dem[0]
+                clipped_dem[clipped_dem <= -99999.0] = np.nan
+
+                if np.count_nonzero(~np.isnan(clipped_dem)) < minimum_pixels_per_edge:
+                    print('not enough pixels in edge. edge = {}. count = {}.'.format(edg, np.count_nonzero(~np.isnan(clipped_dem))))
+                    continue
+
+                notnan = ~np.isnan(clipped_dem)
+                zCutGeoTiffMatrix2masked = clipped_dem[notnan]
+
+                minElev = np.nanmin(zCutGeoTiffMatrix2masked)
+                maxElev = np.nanmax(zCutGeoTiffMatrix2masked)
+
+                countIn_dem = np.count_nonzero(~np.isnan(clipped_dem))
+
+                surfaceElevations = SubgridCalculatorDGP0.generate_surface_elevations( \
+                    surfElevType, surfElevNumLevels, surfElevIncrement,
+                    surfElevFirstIncrement, \
+                    minElev, maxElev, \
+                    surfElevNumLevelsMinIncrement, \
+                    surfElevMinRange, surfElevMinRangeIncrement, \
+                    watDepthAboveHighestGroundIncrement, maxWatDepthAboveHighestGround)
+                num_SfcElevs = len(surfaceElevations)   # number of surface elevations we are running
+                wetDryElementList = np.zeros(num_SfcElevs)   # for wet area fraction phi
+                totWatElementList = np.zeros(num_SfcElevs)   # for grid total water depth H_G
+                
+                # create a 3d surface array for use in calculations
+                tempSurfaceElevArray = np.ones((len(zCutGeoTiffMatrix2masked),
+                                                    num_SfcElevs))*surfaceElevations
+
+                # subtract the bathymetry (2D Array) array from the surface 
+                # elevations (3D array) to get total water depths over the 
+                # element
+                tempTotWatDepthArray = tempSurfaceElevArray -  zCutGeoTiffMatrix2masked[:,np.newaxis]
+                
+                # find which of these cells are wet
+                # add some tiny minimum water depth so we dont have cells with
+                # like 10^-6 depths we will use 1 mm to start
+                tempWetDryList = tempTotWatDepthArray > min_wet_depth
+                
+                # count how many cells are wet
+                wetDryElementList = np.count_nonzero(tempWetDryList,axis=0)
+
+                #################### CALCULATING TOTAL WATER DEPTH ############
+            
+                # 0 out any dry cells
+                tempTotWatDepthWetArray = tempTotWatDepthArray * tempWetDryList
+                
+                # integrate the wet total water depths for use in averaging later
+                totWatElementList = np.sum(tempTotWatDepthWetArray,axis=0)
+
+                # Okay now we can finalize the values
+                wetAvgTotWatDepth = totWatElementList/wetDryElementList
+                gridAvgTotWatDepth = totWatElementList/countIn_dem
+                wetFractionTemp = wetDryElementList/countIn_dem
+
+                # store values
+                ret[iedg] = [
+                    surfaceElevations,
+                    gridAvgTotWatDepth,
+                    wetAvgTotWatDepth,
+                    wetFractionTemp,
+                    minElev,
+                    maxElev
+                ]
+            
+        queue.put(len(target_edges_chunk))
+
+        return ret
+
+    def calculateEdgeLookupTableForVectorizedStorageUsingRasterIO(self):
+        numEdg = self.mesh.numEdg
+
+        # find if each element is within any of the given polygons
+        if hasattr(self.control, 'sgs_region_mask') and self.control.sgs_region_mask:
+            polys = gpd.read_file(self.control.sgs_region_mask).unary_union
+            edgeInsidePolygon = self.mesh.gpd_edge_lines.within(polys)
+        else:
+            edgeInsidePolygon = np.ones(numEdg).astype(bool)
+
+        # make an int array
+        binaryEdgList = np.zeros(numEdg).astype(int)
+                
+        if len(self.control.demFilenameList) != len(self.control.landcoverFilenameList):
+            raise Exception("# of DEM files must match # of land cover files.")
+
+        # Temporary list for storing return values
+        rets = [None] * numEdg
+
+        # Main loops
+        for ifile in range(len(self.control.demFilenameList)):
+            demFilename = self.control.demFilenameList[ifile]
+            target_edges = np.where((binaryEdgList == 0) & (edgeInsidePolygon == True))[0]
+            # target_edges = [56]
+            
+            max_count = len(target_edges)
+            chunk_size = self.mp_chunk_size
+            edges_per_task = min(chunk_size, math.floor(len(target_edges)/self.mp_ncores))
+            if edges_per_task == 0:
+                chunks = [list(target_edges)]
+            else:
+                chunks = [[target_edges[j] for j in range(i*edges_per_task,(i+1)*edges_per_task)] for i in range(math.floor(len(target_edges)/edges_per_task))]
+                if max(chunks[-1]) != len(target_edges)-1:
+                    i = math.floor(len(target_edges)/edges_per_task)
+                    chunks.append([target_edges[j] for j in range(i*edges_per_task,len(target_edges))])
+            # print('chunks = ', chunks)
+            
+            with gw.open(demFilename) as tif_dem:
+                countElementLoop = 0
+                self.init_progressbar(max_count, "generating edge lookup tables")
+                shared_queue = SimpleQueue()
+                pb_process = Process(target=self.show_progressbar, args=(max_count, "generating sgs tables", shared_queue))
+                pb_process.start()
+
+                with Pool(self.mp_ncores, initializer=SubgridCalculatorDGP0.init_worker, initargs=(shared_queue,)) as pool:
+                    cnt = 0
+                    for i, rets_chunk in enumerate(pool.imap(partial( \
+                        SubgridCalculatorDGP0.generate_table_for_edge_chunk_rasterio,
+                            demFilename, self.mesh.gpd_edge_polygons,
+                            self.min_wet_depth,
+                            self.minimum_pixels_per_edge,
+                            self.surfElevType, self.surfElevNumLevels, self.surfElevIncrement,
+                            self.surfElevFirstIncrement,
+                            self.surfElevNumLevelsMinIncrement,
+                            self.surfElevMinRange, self.surfElevMinRangeIncrement,
+                            self.watDepthAboveHighestGroundIncrement, self.maxWatDepthAboveHighestGround,
+                            ), chunks)):
 
                         cnt += len(chunks[i])
 
@@ -2336,6 +3120,55 @@ class SubgridCalculatorDGP0():
 
         lookupTable.close()
 
+
+    ######## Get a element value for a given element and surface elevation for vectorized storage ########
+    
+    def getElementValueAtSurfaceElevation(self, ve, ele, se, is_h=False):
+        import sys
+        import math
+        ista = self.subgridvectorized.elemIndex[ele]
+        numEle = self.mesh.numEle
+        if ele == numEle - 1:
+            iend = len(ve)
+        else:
+            iend = self.subgridvectorized.elemIndex[ele+1]
+
+        vinterp = np.nan
+        if ista == iend:
+            vinterp = np.nan
+        elif se < self.subgridvectorized.surfaceElevations[ista]:
+            vinterp = np.nan
+        elif  se > self.subgridvectorized.surfaceElevations[iend-1]:
+            vinterp = ve[iend-1]
+            if is_h:
+                vinterp += se - self.subgridvectorized.surfaceElevations[iend-1] 
+        else:
+            found = False
+            while True:
+                ii = math.floor((ista+iend)/2)
+                if self.subgridvectorized.surfaceElevations[ii] <= se and self.subgridvectorized.surfaceElevations[ii+1] >= se:
+                    found = True
+                    break
+                elif self.subgridvectorized.surfaceElevations[ii] > se:
+                    iend = ii
+                elif self.subgridvectorized.surfaceElevations[ii+1] < se:
+                    ista = ii
+                if ista == iend:
+                    break
+            if found == False:
+                print("ista:{:d}, iend:{:d}, SE:{:.2f}, surfaceElev[0,end]=({:.2f},{:.2f}), minElevationEle={:.2f}, maxElevationEle={:.2f}".\
+                        format(ista, iend, se, 
+                                self.subgridvectorized.surfaceElevations[0],
+                                self.subgridvectorized.surfaceElevations[-1],
+                                self.subgridvectorized.minElevationEle[ele],
+                                self.subgridvectorized.maxElevationEle[ele]))
+                sys.exit("Matching slot not found")
+            r = (se - self.subgridvectorized.surfaceElevations[ii]) / \
+                (self.subgridvectorized.surfaceElevations[ii+1] - self.subgridvectorized.surfaceElevations[ii])
+            vinterp = (1-r)*ve[ii] + r*ve[ii+1]
+        return vinterp
+
+
     ######## Plot subgrid correction data for vectorized storage ########
 
     def plot_subgrid_for_vectorizedstorage(self,imagePath):
@@ -2447,7 +3280,7 @@ class SubgridCalculatorDGP0():
                 fig.savefig("{:s}/sg_{:s}_{:03d}.png".format(imagePath,figfile,i),dpi=600,facecolor='white',edgecolor='none')
                 plt.close()
 
-        surfElevForPlot = np.arange(-20.0,4.0,4.0)
+        surfElevForPlot = np.arange(-4.0,2.0,1.0)
 
         # mesh z
         vn = np.asarray(self.mesh.coord['Elevation'])
@@ -2546,3 +3379,94 @@ class SubgridCalculatorDGP0():
         global queue
         queue = shared_queue
     #######################################################################
+    
+def main() -> int:
+    import os
+    import argparse        
+    
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Create subgrid lookup table.')
+    parser.add_argument('--meshfile', type=str, required=True, help='Mesh file')
+    parser.add_argument('--meshepsg', type=str, default='epsg:4326', help='Mesh EPSG. Default: epsg:4326')
+    parser.add_argument('--outputfile', type=str, required=True, help='Output file')
+    parser.add_argument('--no_mesh_projection', action='store_true', help='No projection of mesh coordinates to calculate element areas and edge lengths')
+    parser.add_argument('--imagepath', type=str, required=True, help='Image path')
+    parser.add_argument('--demlist', type=str, nargs='+', required=True, help='Comma seprated dem files')
+    parser.add_argument('--landlist', type=str, nargs='+', required=True, help='Comma seprated landuse files')
+    parser.add_argument('--landtiff_type', type=str, default='landuse', help='Land tiff type. landuse or manningsn. Default: landuse')
+    parser.add_argument('--landuse_product', type=str, default='C-CAP', help='Land use product. C-CAP or NLCD. Default: C-CAP')
+    parser.add_argument('--defaultmanningsn', type=float, default=0.02, help='Default mannings n')
+    parser.add_argument('--cf_lower_lim', type=float, default=0.0001, help='friction coefficient lower limit')
+    parser.add_argument('--cmf_formula', type=str, default='kennedy2019', help='cmf formula')
+    parser.add_argument('--do_distance_correction', action='store_true', help='Apply distance correction')
+    parser.add_argument('--no_projection', action='store_true', help='No projection')
+    parser.add_argument('--edge_width_m', type=float, default=10.0, help='Edge width in meters')
+    parser.add_argument('--minimum_pixels_per_elem', type=int, default=1, help='Minimum pixels per element')
+    parser.add_argument('--minimum_pixels_per_edge', type=int, default=1, help='Minimum pixels per edge')
+    parser.add_argument('--mp_chunk_size', type=int, default=100, help='Chunk size for multiprocessing')
+    parser.add_argument('--mp_ncores', type=int, default=1, help='Number of cores for multiprocessing')
+    parser.add_argument('--regionmask', type=str, default='', help='Region mask')
+    args = parser.parse_args()
+
+    print('Command line arguments:')
+    print(args)
+
+    sc = SubgridCalculatorDGP0()
+    sc.regionmask = args.regionmask
+    sc.control.outputFilename = args.outputfile
+    sc.control.demFilenameList = [dem.strip() for dem in args.demlist[0].split(',')]
+    sc.control.landcoverFilenameList = [land.strip() for land in args.landlist[0].split(',')]
+    sc.landtiff_type = args.landtiff_type
+    sc.setLandCoverToManning(args.landuse_product)
+    sc.default_manningsn = args.defaultmanningsn
+    sc.cf_lower_lim = args.cf_lower_lim
+    sc.cmf_formula = args.cmf_formula
+    sc.do_distance_correction = args.do_distance_correction
+    if args.no_projection:
+        sc.need_projection = False
+    sc.edge_width_m = args.edge_width_m
+    sc.minimum_pixels_per_elem = args.minimum_pixels_per_elem
+    sc.minimum_pixels_per_edge = args.minimum_pixels_per_edge
+    sc.mp_chunk_size = args.mp_chunk_size
+    sc.mp_ncores = args.mp_ncores
+
+    print('reading mesh file', flush=True)
+    sc.readMeshFile(args.meshfile)
+
+    elemfile = args.meshfile.replace('.grd', '_elems.gpkg')
+    if os.path.exists(elemfile):
+        print('reading element triangles in {}'.format(elemfile), flush=True)
+        sc.read_gpd_elem_triangles(infile=elemfile)
+    else:
+        print('building element triangles', flush=True)
+        sc.build_gpd_elem_triangles(mesh_epsg=args.meshepsg, do_projection=not args.no_mesh_projection,
+                                    outfile=elemfile)
+
+    edgelinefile = args.meshfile.replace('.grd', '_edge_lines.gpkg')
+    edgepolyfile = args.meshfile.replace('.grd', '_edge_polys.gpkg')
+    if os.path.exists(edgelinefile) and os.path.exists(edgepolyfile):
+        print('reading edge lines and polygons in')
+        print('    {}'.format(edgelinefile), flush=True)
+        print('    {}'.format(edgepolyfile), flush=True)
+        sc.read_gpd_edge_lines_and_polygons(inlinefile=edgelinefile, inpolyfile=edgepolyfile)
+    else:
+        print('building edge polygons', flush=True)
+        sc.build_gpd_edge_lines_and_polygons(mesh_epsg=args.meshepsg, do_projection=not args.no_mesh_projection,
+                                             outlinefile=edgelinefile, outpolyfile=edgepolyfile)
+
+    print('creating element lookup table', flush=True)
+    sc.calculateElementLookupTableForVectorizedStorageUsingRasterIO()
+
+    print('creating edge lookup table', flush=True)
+    sc.calculateEdgeLookupTableForVectorizedStorageUsingRasterIO()
+
+    print('writing out lookup tables', flush=True)
+    sc.writeSubgridLookupTableNetCDFForVectorizedStorage()
+
+    print('plotting lookup tables', flush=True)
+    sc.plot_subgrid_for_vectorizedstorage(args.imagepath)
+    
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
